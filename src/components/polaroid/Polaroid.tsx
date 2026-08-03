@@ -146,6 +146,9 @@ export default function Polaroid({
       dragMomentum
       dragElastic={0.06}
       dragTransition={{ power: 0.2, timeConstant: 240, restDelta: 0.5 }}
+      // A card owns its one-finger drag. Do not let the pointerdown reach
+      // Corkboard's delegated background handler and start a camera pan too.
+      onPointerDown={(e) => e.stopPropagation()}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       onDragStart={() => {

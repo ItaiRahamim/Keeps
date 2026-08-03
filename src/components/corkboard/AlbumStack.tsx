@@ -107,6 +107,7 @@ export default function AlbumStack({ album, boardScale, onTransformChange, onBri
           type="button"
           className="album-stack-collapse"
           style={{ left: cover.pos_x, top: cover.pos_y, zIndex: maxZ + 1 }}
+          onPointerDown={(event) => event.stopPropagation()}
           onClick={() => setExpanded(false)}
         >
           Collapse {count} photos
@@ -165,6 +166,7 @@ export default function AlbumStack({ album, boardScale, onTransformChange, onBri
           top: cover.pos_y - 12,
           zIndex: cover.z_index + 1,
         }}
+        onPointerDown={(event) => event.stopPropagation()}
         onClick={() => setExpanded(true)}
         aria-label={`Show all ${count} photos in this album`}
         title={`${count} photos — tap to expand`}

@@ -14,9 +14,16 @@
   overflow: hidden;
   width: 100%;
   height: 100%;
+  /* The board owns all direct-manipulation gestures. This is deliberately
+     on the viewport itself (not only the transformed surface) so WebKit
+     decides before a gesture begins that scrolling, pull-to-refresh,
+     double-tap zoom, and rubber-band navigation must not take over. */
   touch-action: none;
   cursor: grab;
-  overscroll-behavior: contain;
+  overscroll-behavior: none;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
 }
 
 .corkboard-viewport[data-panning='true'] {
