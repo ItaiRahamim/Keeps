@@ -1,30 +1,19 @@
 /*
  * Corkboard background — design-system.md §2.
- * Pure CSS 3-layer texture stack (no image asset): base fill, cork fleck
- * grain (radial-gradients), fractal-noise SVG overlay, plus an inset
- * vignette box-shadow on the outer wrapper. Every layer uses a fixed
- * (viewport-independent) background-size, so panning the board never
- * reveals a texture seam.
+ * The actual 3-layer texture stack (base fill, cork fleck grain,
+ * fractal-noise overlay, inset vignette) lives in `cork-texture.css` and is
+ * shared with the `/login` page's Polaroid-on-corkboard shell; this file
+ * only adds the pannable-viewport-specific concerns (sizing, grab cursor,
+ * touch handling) on top of the `.cork-texture` class applied in
+ * Corkboard.tsx.
  */
+@import './cork-texture.css';
 
 .corkboard-viewport {
   position: relative;
   overflow: hidden;
   width: 100%;
   height: 100%;
-  background-color: var(--color-cork);
-  /* Layer 2: cork fleck grain */
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(0, 0, 0, 0.06) 0, transparent 1.5px),
-    radial-gradient(circle at 60% 70%, rgba(0, 0, 0, 0.05) 0, transparent 1.2px),
-    radial-gradient(circle at 40% 85%, rgba(255, 255, 255, 0.04) 0, transparent 1px);
-  background-size:
-    18px 18px,
-    24px 24px,
-    14px 14px;
-  /* Board reads as a physical panel with depth falloff at the edges, not a
-     flat infinite fill. */
-  box-shadow: inset 0 0 120px rgba(0, 0, 0, 0.25);
   touch-action: none;
   cursor: grab;
   overscroll-behavior: contain;
@@ -32,20 +21,6 @@
 
 .corkboard-viewport[data-panning='true'] {
   cursor: grabbing;
-}
-
-/* Layer 3: fractal-noise overlay for paper/cork "tooth". Low-opacity
-   feTurbulence data-URI, mix-blend-mode overlay, fixed tile size so it's
-   independent of pan/zoom and never seams. */
-.corkboard-viewport::after {
-  content: '';
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0.05;
-  mix-blend-mode: overlay;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='200' height='200'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
-  background-size: 200px 200px;
 }
 
 .corkboard-surface {

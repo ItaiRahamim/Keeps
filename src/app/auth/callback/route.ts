@@ -1,9 +1,12 @@
 import { NextResponse } from 'next/server';
 import { createClient } from '@/lib/supabase/server';
 
-// Exchanges the `code` query param from the magic-link email for a session,
-// then redirects into the app. Matches the redirect target configured in
-// `emailRedirectTo` in src/app/login/page.tsx.
+// Exchanges the `code` query param for a session via PKCE code exchange,
+// then redirects into the app. With password-based auth this now serves
+// email-confirmation links from signUp() (previously it served magic-link
+// sign-ins) — same underlying mechanism, so no logic change was needed here,
+// only this comment. Matches the redirect target configured via
+// `emailRedirectTo` in src/lib/auth/actions.ts.
 export async function GET(request: Request) {
   const { searchParams, origin } = new URL(request.url);
   const code = searchParams.get('code');

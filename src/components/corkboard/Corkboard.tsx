@@ -136,7 +136,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   return (
     <div
       ref={viewportRef}
-      className="corkboard-viewport"
+      className="corkboard-viewport cork-texture"
       data-panning={isPanning}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}

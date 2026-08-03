@@ -38,7 +38,7 @@ All tokens below live in `src/app/globals.css` inside an `@theme { }` block:
   --shadow-pin: 1px 2px 3px rgba(0,0,0,0.5);
 
   /* Typography */
-  --font-caption: var(--font-caveat), "Kalam", cursive;
+  --font-caption: var(--font-solitreo), cursive;
   --font-ui: var(--font-sans-ui), system-ui, sans-serif;
 
   /* Motion */
@@ -48,11 +48,15 @@ All tokens below live in `src/app/globals.css` inside an `@theme { }` block:
 }
 ```
 
-`Caveat` is loaded via `next/font/google` with `subsets: ["latin", "hebrew"]` (the family is
-Hebrew-speaking — PRD §4 itself labels pushpins "הנעצים") and exposed as `--font-caveat`.
-Kalam is documented as the fallback with broader Hebrew glyph coverage; use it if Caveat's
-Hebrew subset ever looks thin in practice. UI chrome (buttons, nav, forms) uses a separate
-clean sans (`--font-sans-ui`) — only captions should look handwritten.
+`Solitreo` is loaded via `next/font/google` with `subsets: ["hebrew", "latin", "latin-ext"]`
+(the family is Hebrew-speaking — PRD §4 itself labels pushpins "הנעצים") and exposed as
+`--font-solitreo`. It replaced an earlier `Caveat` + `Kalam` fallback chain: neither of those
+has a Hebrew subset in next/font's Google Fonts data, so Hebrew captions were silently
+rendering in the browser's generic fallback, not a handwriting face. Solitreo is a genuine
+cursive Hebrew script whose Latin glyphs also render in a flowing script style, so a single
+font now covers both scripts — see §6 for the comparison that led here. UI chrome (buttons,
+nav, forms) uses a separate clean sans (`--font-sans-ui`) — only captions should look
+handwritten.
 
 ---
 
@@ -83,6 +87,12 @@ depth falloff at the edges, not a flat infinite fill.
 
 All three layers use `background-repeat` and fixed `background-size` (not viewport-relative),
 so panning the board never reveals a texture seam.
+
+Implemented as a standalone `.cork-texture` class in
+`src/components/corkboard/cork-texture.css` (imported by `background.css`), so any other
+full-bleed surface that wants the identical texture — e.g. the `/login` page's
+corkboard-with-a-pinned-Polaroid shell (§9) — composes this one class instead of re-deriving
+the layers by hand.
 
 ---
 
@@ -160,10 +170,31 @@ as broken, not "tactile."
 
 ## 6. Typography
 
-- **Captions** (handwritten notes on the Polaroid chin): `Caveat`, variable weight 400–700,
-  loaded via `next/font/google`, `subsets: ["latin", "hebrew"]`, `display: "swap"`.
-- **Fallback**: `Kalam` — slightly better Hebrew glyph shapes if Caveat's Hebrew coverage proves
-  thin in testing.
+- **Captions** (handwritten notes on the Polaroid chin): `Solitreo`, weight 400 (its only
+  weight), loaded via `next/font/google`, `subsets: ["hebrew", "latin", "latin-ext"]`,
+  `display: "swap"`.
+- **Why Solitreo**: `next/font/google`'s bundled catalog (the actual source of truth for what
+  builds — not the live Google Fonts website) lists ~61 families with a `hebrew` subset; of
+  those, three read as genuine handwriting/script candidates:
+  - `Playpen Sans Hebrew` (variable 100–800) — a casual, rounded, kid's-print handwriting
+    family. Rendered as a bold, rounded marker/print style in both scripts — legible and
+    consistent across scripts, but does not read as *cursive*.
+  - `Solitreo` (weight 400 only) — a real historical cursive Hebrew script (traditionally used
+    for Ladino/Judeo-Spanish). Its Latin glyphs *also* render in a flowing cursive style, not a
+    merely-functional companion face as initially suspected.
+  - `Rubik Scribble` (weight 400 only) — a doodly/scribbled display style. Rendered too
+    faint/low-contrast (thin outline strokes) to read comfortably at the `.polaroid-chin` size
+    (`1.35rem`).
+
+  All three were rendered side-by-side with sample Latin and Hebrew text at the actual caption
+  size, including an in-context mockup of the real `.polaroid-chin` box (padding, height,
+  ellipsis truncation). Solitreo was the only candidate that reads as genuinely
+  handwritten/cursive in *both* scripts and matches the flowing spirit of the previous Caveat
+  choice for Latin — so it replaced Caveat/Kalam entirely rather than pairing two fonts behind
+  a `lang`/script check.
+- **No separate fallback font is needed**: Solitreo alone covers both scripts. The CSS fallback
+  chain (`var(--font-solitreo), cursive`) only exists for the (unlikely) case the webfont fails
+  to load at all.
 - **UI chrome** (nav, buttons, forms, upload sheet): a separate clean sans, *not* the caption
   font — only handwritten content should look handwritten; UI controls in a script font hurt
   legibility and feel like a novelty theme rather than a designed product.
@@ -193,3 +224,33 @@ this is the point of the feature per PRD §3.2 ("Videos appear exactly like phot
   same aspect-ratio box, same padding, same shadow. Only the innermost media layer changes.
 - Autoplay, loop, muted, `playsInline` (required for iOS inline playback — without it iOS forces
   fullscreen takeover, breaking the "plays inside the frame" requirement).
+
+---
+
+## 9. The `/login` page
+
+`/login` is styled as a large Polaroid pinned to the corkboard, not a generic centered form —
+it should read as part of the same physical object as the board itself:
+
+- **Background**: the same `.cork-texture` class (§2) the board uses, applied directly to the
+  page's outer `<main>`. No pan/zoom/drag on this page, so none of `.corkboard-viewport`'s
+  interaction rules (cursor, touch-action) apply — only the texture is shared.
+- **Card**: the actual `.polaroid-body`/`.polaroid-chin` classes from `polaroid.css` (§3),
+  unmodified — same off-white background, the same `12px 12px 56px 12px` asymmetric padding,
+  the same paper-grain overlay, and the exact `--shadow-polaroid` box-shadow token. A dedicated
+  `.login-polaroid` wrapper (`src/app/login/login.css`) only adds page-specific sizing
+  (`width: min(92vw, 380px)`) and a fixed `rotate(-2deg)` tilt — within §5's `[-3.5, 3.5]`
+  range, but a constant rather than hashed from a media UUID, since there's no media row on
+  this page to hash from (§5's determinism requirement is about board-card SSR/hydration
+  agreement specifically; a login page rendered once doesn't have that hazard — it just must
+  not be `Math.random()`, which would reshuffle across re-renders too).
+- **Pushpin**: the real `<Pushpin>` component (§4), not a redrawn approximation, placed as a
+  sibling of `.polaroid-body` inside the `position: relative` `.login-polaroid` wrapper — the
+  same structural relationship `<Polaroid>` itself uses.
+- **Content mapping**: the email form (heading, input, submit button, error/sent states) occupies
+  the "photo" region in `--font-ui` — form controls stay legible sans, per §6's rule that only
+  captions look handwritten — while the chin carries a short handwritten caption ("Keeps") in
+  `--font-caption`, exactly like a photo's caption everywhere else on the board.
+- **State preservation**: the shell is constant across `idle`/`loading`/`sent`/`error` — only
+  the photo-region content swaps (form vs. the "check your email" confirmation), so the page
+  never jumps between two unrelated layouts the way the original plain-form version did.

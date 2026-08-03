@@ -5,11 +5,11 @@ const baseConfig: NextConfig = {
   images: {
     // Next.js 16 removed `images.domains` — `remotePatterns` is required for
     // any next/image src on a remote host (see version-16 upgrade docs).
-    // TODO: confirm/replace once R2 public bucket domain is known
+    // Confirmed R2 bucket public dev domain (keeps-media).
     remotePatterns: [
       {
         protocol: "https",
-        hostname: "**.r2.dev",
+        hostname: "pub-df9af4c1dda94069af1d362573021f55.r2.dev",
       },
     ],
   },

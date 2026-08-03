@@ -1,17 +1,5 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
-}
-
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
 /*
  * "Pinned Keeps" design-system tokens — see design-system.md §1.
  * Consumed by the UI/UX agent's Corkboard/Polaroid/Pushpin components.
@@ -37,10 +25,16 @@
   --shadow-pin: 1px 2px 3px rgba(0, 0, 0, 0.5);
 
   /* Typography */
-  /* --font-caveat and --font-sans-ui are supplied by next/font/google in
+  /* --font-solitreo and --font-sans-ui are supplied by next/font/google in
      src/app/layout.tsx (via each font's `variable` option) and applied as
-     classNames on <html>; they are only *referenced*, not defined, here. */
-  --font-caption: var(--font-caveat), 'Kalam', cursive;
+     classNames on <html>; they are only *referenced*, not defined, here.
+     Solitreo (subsets: hebrew, latin, latin-ext) is a genuine cursive
+     Hebrew script whose Latin glyphs also render in a flowing script
+     style, so one font covers both scripts — see layout.tsx for the
+     comparison against Caveat/Playpen Sans Hebrew/Rubik Scribble that led
+     here. Generic `cursive` is the last-resort fallback if the webfont
+     fails to load at all. */
+  --font-caption: var(--font-solitreo), cursive;
   --font-ui: var(--font-sans-ui), system-ui, sans-serif;
 
   /* Motion */
@@ -49,15 +43,34 @@
   --duration-lift: 0.18s;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+/*
+ * Keeps is a single, deliberately warm/physical palette (cork-tan board +
+ * off-white polaroid paper — design-system.md) with no separate dark-mode
+ * palette defined anywhere in the design system. The scaffold's
+ * `prefers-color-scheme: dark` override (previously here) swapped `body`'s
+ * background to near-black (#0a0a0a) for any user with OS/browser dark mode
+ * on — completely disconnected from the actual theme tokens below, and the
+ * direct cause of the app rendering as a solid black screen after login.
+ * Rather than inventing a second, undesigned dark palette, the app opts out
+ * of automatic OS-driven remapping so native form controls / scrollbars
+ * don't mismatch the deliberately-light physical surface either.
+ */
+:root {
+  color-scheme: light;
 }
 
+/*
+ * `body` is the base layer behind every route's own full-bleed surface
+ * (`.cork-texture` on the corkboard viewport and the `/login` page — see
+ * cork-texture.css / login.css) — visible only as a safety net: before
+ * hydration, and as the fallback if a full-bleed child ever fails to fill
+ * its container. Cork-tan (not the off-white polaroid tone) is the right
+ * fallback here since it's the app's actual base physical surface — a gap
+ * revealing more "corkboard" reads as intentional, where the paper tone
+ * would read as a stray white stripe.
+ */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-cork);
+  color: var(--color-polaroid-shadow-tint);
+  font-family: var(--font-ui);
 }

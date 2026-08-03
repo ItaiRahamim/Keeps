@@ -1,82 +1,156 @@
 'use client';
 
 import { useState, type FormEvent } from 'react';
-import { createClient } from '@/lib/supabase/client';
+import { useRouter } from 'next/navigation';
+import {
+  signInWithPassword,
+  signUpWithPassword,
+  type AuthResult,
+} from '@/lib/auth/actions';
+import Pushpin from '@/components/pushpin/Pushpin';
+import '@/components/corkboard/cork-texture.css';
+import '@/components/polaroid/polaroid.css';
+import './login.css';
 
-type Status = 'idle' | 'loading' | 'sent' | 'error';
+type Mode = 'sign_in' | 'sign_up';
+type Status = 'idle' | 'loading' | 'check_email' | 'error';
 
 export default function LoginPage() {
+  const router = useRouter();
+  const [mode, setMode] = useState<Mode>('sign_in');
   const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [status, setStatus] = useState<Status>('idle');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const isSignUp = mode === 'sign_up';
+
+  function toggleMode() {
+    setMode((current) => (current === 'sign_in' ? 'sign_up' : 'sign_in'));
+    setStatus('idle');
+    setErrorMessage(null);
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus('loading');
     setErrorMessage(null);
 
-    const supabase = createClient();
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const result: AuthResult = isSignUp
+      ? await signUpWithPassword(email, password)
+      : await signInWithPassword(email, password);
 
-    const { error } = await supabase.auth.signInWithOtp({
-      email,
-      options: {
-        emailRedirectTo: `${siteUrl}/auth/callback`,
-      },
-    });
-
-    if (error) {
+    if (result.status === 'error') {
       setStatus('error');
-      setErrorMessage(error.message);
+      setErrorMessage(result.message);
       return;
     }
 
-    setStatus('sent');
-  }
+    if (result.status === 'check_email') {
+      setStatus('check_email');
+      return;
+    }
 
-  if (status === 'sent') {
-    return (
-      <main className="flex min-h-screen flex-col items-center justify-center gap-3 p-8 text-center">
-        <h1 className="text-2xl font-semibold">Check your email</h1>
-        <p className="max-w-sm text-sm text-neutral-600">
-          We sent a magic link to <strong>{email}</strong>. Open it on this
-          device to sign in.
-        </p>
-      </main>
-    );
+    // 'signed_in' — nudge into the app immediately rather than leaving the
+    // user on a stale login screen; proxy.ts also handles this on next nav.
+    router.push('/');
+    router.refresh();
   }
 
   return (
-    <main className="flex min-h-screen flex-col items-center justify-center gap-6 p-8">
-      <form
-        onSubmit={handleSubmit}
-        className="flex w-full max-w-sm flex-col gap-4"
-      >
-        <h1 className="text-center text-2xl font-semibold">Sign in to Keeps</h1>
-        <label className="flex flex-col gap-1 text-sm">
-          Email
-          <input
-            type="email"
-            name="email"
-            required
-            autoComplete="email"
-            placeholder="you@example.com"
-            value={email}
-            onChange={(event) => setEmail(event.target.value)}
-            className="rounded border border-neutral-300 px-3 py-2 outline-none focus:border-neutral-500"
-          />
-        </label>
-        <button
-          type="submit"
-          disabled={status === 'loading'}
-          className="rounded bg-neutral-900 px-3 py-2 text-white disabled:opacity-50"
-        >
-          {status === 'loading' ? 'Sending…' : 'Send magic link'}
-        </button>
-        {status === 'error' && errorMessage ? (
-          <p className="text-sm text-red-600">{errorMessage}</p>
-        ) : null}
-      </form>
+    <main className="login-page cork-texture">
+      {/* A large Polaroid pinned to the corkboard (design-system.md §9) —
+          same off-white card, asymmetric chin padding, and exact
+          --shadow-polaroid token as every media Polaroid on the board,
+          plus the real <Pushpin> component, so /login reads as part of the
+          same physical corkboard rather than a generic app screen. */}
+      <div className="login-polaroid">
+        <Pushpin color="red" position="top" />
+        <div className="polaroid-body">
+          <div className="login-polaroid-photo">
+            {status === 'check_email' ? (
+              <div className="login-sent">
+                <p className="login-sent-title">Confirm your email</p>
+                <p className="login-sent-body">
+                  We sent a confirmation link to <strong>{email}</strong>. Open
+                  it on this device to finish creating your account.
+                </p>
+              </div>
+            ) : (
+              <>
+                <h1 className="login-heading">
+                  {isSignUp ? 'Create your Keeps account' : 'Sign in to Keeps'}
+                </h1>
+                <p className="login-subheading">
+                  {isSignUp
+                    ? 'Save your family memories in one place'
+                    : 'Welcome back'}
+                </p>
+                <form onSubmit={handleSubmit} className="login-form">
+                  <label className="login-field">
+                    Email
+                    <input
+                      type="email"
+                      name="email"
+                      required
+                      autoComplete="email"
+                      placeholder="you@example.com"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      className="login-input"
+                    />
+                  </label>
+                  <label className="login-field">
+                    Password
+                    <input
+                      type="password"
+                      name="password"
+                      required
+                      autoComplete={isSignUp ? 'new-password' : 'current-password'}
+                      placeholder={isSignUp ? 'Create a password' : 'Your password'}
+                      value={password}
+                      onChange={(event) => setPassword(event.target.value)}
+                      className="login-input"
+                    />
+                  </label>
+                  <button
+                    type="submit"
+                    disabled={status === 'loading'}
+                    className="login-submit"
+                  >
+                    {status === 'loading'
+                      ? isSignUp
+                        ? 'Signing up…'
+                        : 'Signing in…'
+                      : isSignUp
+                        ? 'Sign up'
+                        : 'Log in'}
+                  </button>
+                  {status === 'error' && errorMessage ? (
+                    <p className="login-error">{errorMessage}</p>
+                  ) : null}
+                </form>
+                <p className="login-toggle">
+                  {isSignUp
+                    ? 'Already have an account?'
+                    : "Don't have an account?"}{' '}
+                  <button
+                    type="button"
+                    className="login-toggle-button"
+                    onClick={toggleMode}
+                  >
+                    {isSignUp ? 'Log in' : 'Sign up'}
+                  </button>
+                </p>
+              </>
+            )}
+          </div>
+
+          <div className="polaroid-chin">
+            <span>Keeps</span>
+          </div>
+        </div>
+      </div>
     </main>
   );
 }

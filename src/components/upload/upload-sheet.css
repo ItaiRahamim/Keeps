@@ -102,9 +102,10 @@
   font-family: var(--font-caption);
   font-size: 1.35rem;
   padding: 0.4rem 0.6rem;
-  border: 1px solid rgba(0, 0, 0, 0.15);
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 22%, transparent);
   border-radius: 0.4rem;
-  background: white;
+  background: var(--color-polaroid);
+  color: var(--color-polaroid-shadow-tint);
 }
 
 .upload-video-preview {
@@ -125,7 +126,7 @@
   border-radius: 0.4rem;
   border: none;
   cursor: pointer;
-  background: rgba(0, 0, 0, 0.08);
+  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 9%, transparent);
   color: inherit;
 }
 
@@ -158,7 +159,7 @@
   border-radius: 0.4rem;
   border: none;
   cursor: pointer;
-  background: rgba(0, 0, 0, 0.08);
+  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 9%, transparent);
   color: inherit;
 }
 
@@ -172,7 +173,7 @@
   width: 100%;
   height: 0.5rem;
   border-radius: 9999px;
-  background: rgba(0, 0, 0, 0.1);
+  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 12%, transparent);
   overflow: hidden;
 }
 

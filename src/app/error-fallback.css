@@ -1,0 +1,106 @@
+/*
+ * Shared styling for the two in-layout error surfaces that can appear on
+ * the main board: `error.tsx` (the route error boundary) and `page.tsx`'s
+ * own inline try/catch fallback (used specifically so a Server Component
+ * data-fetch failure can show its real, unredacted message — see the long
+ * comment in page.tsx). Both render inside the root layout, so they use
+ * the same theme tokens/fonts as everywhere else instead of a generic,
+ * unthemed crash screen. `global-error.tsx` is a different case — it
+ * replaces the root layout entirely, so it can't use these tokens and is
+ * styled inline with literal values instead (see its own comments).
+ *
+ * The raw error text must stay fully visible/legible — that's deliberate,
+ * for debugging a real live bug — so `.error-fallback-pre` only gets a
+ * high-contrast paper background and an explicit monospace stack, never a
+ * "nicer" summarized message in its place.
+ */
+
+.error-fallback-main {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.error-fallback-card {
+  position: relative;
+  overflow: hidden;
+  max-width: 640px;
+  width: 100%;
+  background: var(--color-polaroid);
+  color: var(--color-polaroid-shadow-tint);
+  font-family: var(--font-ui);
+  padding: 1.5rem;
+  box-shadow: var(--shadow-polaroid);
+  box-sizing: border-box;
+}
+
+/* Paper grain overlay — same feTurbulence technique as the Polaroid card
+   (polaroid.css) and the corkboard itself, so this reads as the same
+   physical paper rather than a flat UI panel. */
+.error-fallback-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/rect%3E%3C/svg%3E");
+  background-size: 150px 150px;
+}
+
+.error-fallback-title {
+  position: relative;
+  font-family: var(--font-ui);
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+  color: var(--color-polaroid-shadow-tint);
+}
+
+.error-fallback-lede {
+  position: relative;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  line-height: 1.5;
+  margin: 0 0 1rem;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 75%, transparent);
+}
+
+.error-fallback-pre {
+  position: relative;
+  white-space: pre-wrap;
+  word-break: break-word;
+  text-align: left;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--color-polaroid-shadow-tint);
+  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 7%, var(--color-polaroid));
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 18%, transparent);
+  border-radius: 6px;
+  padding: 0.75rem;
+  margin: 0;
+}
+
+.error-fallback-button {
+  position: relative;
+  display: inline-block;
+  margin-top: 1rem;
+  padding: 0.5rem 1.1rem;
+  border: none;
+  border-radius: 0.4rem;
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: white;
+  background: var(--color-pin-teal);
+  box-shadow: var(--shadow-polaroid);
+  cursor: pointer;
+  transition: box-shadow var(--duration-lift) ease-out;
+}
+
+.error-fallback-button:hover {
+  box-shadow: var(--shadow-polaroid-lifted);
+}

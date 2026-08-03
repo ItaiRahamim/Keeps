@@ -1,0 +1,158 @@
+/*
+ * /login page — a large Polaroid pinned to the corkboard (design-system.md
+ * §9). Reuses the shared `.cork-texture` background (cork-texture.css) and
+ * the `.polaroid-body`/`.polaroid-chin` classes from polaroid.css
+ * (identical off-white background, asymmetric padding+chin, and the exact
+ * `--shadow-polaroid` box-shadow token that every other Polaroid on the
+ * board uses) plus the real `<Pushpin>` component — nothing here
+ * re-derives that construction, it only adds the page-specific
+ * centering/sizing/rotation and the form's own field styles.
+ */
+
+.login-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  box-sizing: border-box;
+}
+
+.login-polaroid {
+  position: relative;
+  width: min(92vw, 380px);
+  /* Fixed tilt within design-system.md §5's [-3.5, 3.5] range. There's no
+     media row here to hash a deterministic angle from (§5's determinism
+     requirement is specifically about avoiding SSR/hydration mismatches
+     for *board* cards), so a constant is simplest — just not
+     `Math.random()`, which would still reshuffle across every re-render. */
+  transform: rotate(-2deg);
+}
+
+.login-polaroid-photo {
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+  min-height: 240px;
+  justify-content: center;
+}
+
+.login-heading {
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-weight: 600;
+  text-align: center;
+  color: var(--color-polaroid-shadow-tint);
+  margin: 0;
+}
+
+.login-subheading {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 65%, transparent);
+  margin: -0.6rem 0 0;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+}
+
+.login-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: var(--color-polaroid-shadow-tint);
+}
+
+.login-input {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 30%, transparent);
+  border-radius: 0.375rem;
+  padding: 0.55rem 0.75rem;
+  background: #fff;
+  color: var(--color-polaroid-shadow-tint);
+  outline: none;
+  transition: border-color var(--duration-lift) ease-out;
+}
+
+.login-input:focus {
+  border-color: var(--color-polaroid-shadow-tint);
+}
+
+.login-submit {
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  font-weight: 600;
+  border: none;
+  border-radius: 0.375rem;
+  padding: 0.65rem 0.75rem;
+  background: var(--color-polaroid-shadow-tint);
+  color: var(--color-polaroid);
+  cursor: pointer;
+  transition: opacity var(--duration-lift) ease-out;
+}
+
+.login-submit:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.login-error {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  color: #b3261e;
+  text-align: center;
+  margin: 0;
+}
+
+.login-sent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  text-align: center;
+}
+
+.login-sent-title {
+  font-family: var(--font-ui);
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--color-polaroid-shadow-tint);
+  margin: 0;
+}
+
+.login-sent-body {
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 80%, transparent);
+  margin: 0;
+}
+
+.login-toggle {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  text-align: center;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 70%, transparent);
+  margin: 0;
+}
+
+.login-toggle-button {
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  background: none;
+  border: none;
+  padding: 0;
+  color: var(--color-polaroid-shadow-tint);
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.login-toggle-button:hover {
+  opacity: 0.8;
+}

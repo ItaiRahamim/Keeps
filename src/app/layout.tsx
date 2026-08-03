@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Caveat, Geist, Geist_Mono } from "next/font/google";
+import { Geist, Geist_Mono, Solitreo } from "next/font/google";
 import "./globals.css";
 
 // UI chrome font (buttons, nav, forms) — NOT the handwritten caption font.
@@ -17,21 +17,30 @@ const geistMono = Geist_Mono({
 
 // Handwritten caption font for Polaroid captions (design-system.md §1/§6).
 //
-// DEVIATION FROM SPEC: the task asked for `subsets: ["latin", "hebrew"]`
-// because the family is Hebrew-speaking, but Caveat has no "hebrew" subset
-// in Google Fonts / next/font's metadata (verified in
-// node_modules/next/dist/compiled/@next/font/dist/google/font-data.json —
-// Caveat only ships cyrillic, cyrillic-ext, latin, latin-ext). Requesting an
-// unsupported subset throws at build time, so it's omitted here. Hebrew
-// caption text will fall through to the `"Kalam", cursive` fallback chain in
-// `--font-caption` — but note Kalam *also* has no hebrew subset in next/font's
-// data, so in practice Hebrew captions currently render in the browser's
-// generic cursive/sans fallback, not a handwriting face. Flagging for the
-// UI/UX agent: a Hebrew-capable handwriting web font may need to be sourced
-// separately if this matters for launch.
-const caveat = Caveat({
-  variable: "--font-caveat",
-  subsets: ["latin"],
+// RESOLVED Hebrew-support gap: an earlier pass here used `Caveat`, which
+// has zero Hebrew glyph coverage in next/font's Google Fonts data (verified
+// against node_modules/next/dist/compiled/@next/font/dist/google/font-data.json
+// — Caveat ships only cyrillic/cyrillic-ext/latin/latin-ext), and the
+// documented fallback (`Kalam`) turned out to have *no* Hebrew subset
+// either, so Hebrew captions were silently rendering in the browser's
+// generic serif/cursive fallback, not a handwriting face — a real gap for
+// a Hebrew-speaking family.
+//
+// Replaced with `Solitreo`: a genuine historical *cursive Hebrew* script
+// (`subsets: ["hebrew", "latin", "latin-ext"]`, weight 400 only) that also
+// renders its Latin glyphs in a flowing script style — visually verified
+// side-by-side against Caveat, Playpen Sans Hebrew, and Rubik Scribble at
+// the actual `.polaroid-chin` size (1.35rem): Solitreo was the only
+// Hebrew-capable candidate that reads as genuinely handwritten/cursive in
+// *both* scripts (Playpen Sans Hebrew is a bold rounded print/marker style
+// in both scripts — legible but not cursive; Rubik Scribble renders as a
+// faint sketchy outline, too low-contrast to read comfortably at this
+// size). One font now covers both scripts, so no lang-conditional CSS is
+// needed.
+const solitreo = Solitreo({
+  variable: "--font-solitreo",
+  subsets: ["hebrew", "latin", "latin-ext"],
+  weight: "400",
   display: "swap",
 });
 
@@ -60,9 +69,34 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${solitreo.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      {/*
+        `h-full` (an explicit `height: 100%`), not `min-h-full`
+        (`min-height: 100%`), is load-bearing here.
+        `<main className="relative flex-1">` in page.tsx renders
+        `<Corkboard>`, whose root `.corkboard-viewport` uses `height: 100%`
+        to fill it (background.css) — and every one of its own children
+        (`.corkboard-surface`, `.corkboard-empty-state`, the upload FAB) is
+        `position: absolute`/`fixed`, so `.corkboard-viewport` has zero
+        in-flow content to fall back on for an auto height.
+        Per CSS2.1 §10.5, a percentage `height` only resolves against a
+        containing block whose height was "specified explicitly" — and
+        `min-height` does NOT count, even once the box's flex-grown/clamped
+        *rendered* size fills the viewport. `min-h-full` here left every
+        ancestor's height "indefinite" for that purpose, so `.corkboard-viewport`'s
+        `height: 100%` fell back to `auto` -> resolved to 0 against its
+        all-out-of-flow children -> the entire cork-textured board (and any
+        Polaroids on it) collapsed invisibly, leaving only the flat body
+        background and the fixed-position upload FAB visible. Confirmed via
+        a live, HMR-independent DOM+CSS repro (isolated test nodes, no
+        React/Corkboard involved): swapping just this class from
+        `min-h-full` to `h-full` took a percentage-sized child from
+        `height: 0px` to its correct flex-grown share. `h-full` gives
+        `body` (and everything under it) a height CSS treats as definite,
+        so `height: 100%` resolves all the way down.
+      */}
+      <body className="h-full flex flex-col">{children}</body>
     </html>
   );
 }

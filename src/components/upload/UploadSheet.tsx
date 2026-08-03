@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import type { MediaRow } from '@/lib/types';
 import { createMedia, updateMediaTransform } from '@/lib/media/actions';
 import { processImageFile } from '@/lib/media/image-pipeline';
@@ -28,6 +29,7 @@ export type UploadSheetProps = {
  * same upload + createMedia (+ rotation patch) sequence.
  */
 export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetProps) {
+  const router = useRouter();
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('idle');
   const [videoFile, setVideoFile] = useState<File | null>(null);
@@ -87,13 +89,25 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
 
         onCreated({ ...created, rotation });
         closeSheet();
+
+        // Defense-in-depth: `onCreated` above already splices the new row
+        // into Corkboard's live client state, and `createMedia`/
+        // `updateMediaTransform` already call `revalidatePath('/')` as
+        // Server Actions, which should invalidate the Router Cache for this
+        // route on its own. `router.refresh()` re-fetches this Server
+        // Component's data from the server explicitly, so a real
+        // server-side revalidation happens here too rather than relying
+        // solely on the implicit Server Action revalidation behavior —
+        // cheap, harmless, and closes any gap there even if it isn't the
+        // primary cause of the reported blank-board bug.
+        router.refresh();
       } catch (err) {
         console.error('upload failed', err);
         setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
         setStage('error');
       }
     },
-    [caption, getDropPosition, onCreated, closeSheet]
+    [caption, getDropPosition, onCreated, closeSheet, router]
   );
 
   const handleFileSelected = useCallback(
