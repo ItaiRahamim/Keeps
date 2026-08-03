@@ -12,6 +12,7 @@ export type MediaRow = {
   thumbnail_data: string | null;
   caption: string | null;
   lat_lng: { x: number; y: number } | null;
+  captured_at: string | null;
   cluster_id: string | null;
   pos_x: number;
   pos_y: number;

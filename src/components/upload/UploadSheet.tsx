@@ -76,6 +76,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
           thumbnail_data: processed.thumbnail.lqip,
           caption: caption.trim() || null,
           lat_lng: processed.lat_lng,
+          captured_at: processed.captured_at,
           duration_ms: processed.duration_ms,
           width: processed.width,
           height: processed.height,

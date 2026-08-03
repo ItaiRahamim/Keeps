@@ -16,6 +16,7 @@ export type ProcessedUpload = {
   contentType: string; // MIME type, used both for the presign request and the R2 PUT Content-Type header
   thumbnail: ProcessedThumbnail;
   lat_lng: { x: number; y: number } | null; // EXIF GPS — images only, null for video
+  captured_at: string | null; // EXIF DateTimeOriginal (ISO 8601) — images only, null for video
   width: number | null;
   height: number | null;
   duration_ms: number | null; // videos only, null for images

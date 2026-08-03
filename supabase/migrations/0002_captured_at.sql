@@ -1,0 +1,24 @@
+-- Keeps — add `captured_at` to `media`
+--
+-- 0001_init.sql has already been applied to the live production database,
+-- so it is not edited here (editing an already-applied migration file is
+-- how schema history silently drifts from the live schema). This file is
+-- new and, like 0001, has NOT been applied anywhere automatically — there
+-- is no Supabase CLI/MCP wired into this environment and no DB password,
+-- only API keys. Apply it manually via the Supabase Dashboard's SQL Editor
+-- (paste and run this file), the same way 0001 was applied.
+--
+-- `captured_at` holds the original EXIF capture timestamp
+-- (DateTimeOriginal, falling back to CreateDate/DateTimeDigitized),
+-- extracted client-side from the ORIGINAL image file before any
+-- HEIC-transcoding/WebP-re-encoding (see src/lib/media/exif.ts and
+-- image-pipeline.ts). It is nullable because not every row will have a
+-- value: screenshots and many app-processed images never carry EXIF at
+-- all, and manually-edited or metadata-stripped photos lose it even
+-- though the file itself is otherwise fine. HEIC-transcoded images are
+-- NOT a reason for nullability here — their EXIF is read from the
+-- original file before transcoding, so they keep this field the same as
+-- any other camera photo. Videos also always have this column null: they
+-- never carry EXIF, so no extraction is attempted for them.
+alter table media
+  add column if not exists captured_at timestamptz;

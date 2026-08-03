@@ -53,6 +53,14 @@
   overflow-y: auto;
   border-radius: 1rem 1rem 0 0;
   padding: 1.25rem;
+  /* On notched/home-indicator iPhones the sheet sits flush against the
+     bottom edge (`.upload-sheet-backdrop` uses `align-items: flex-end`
+     below 640px), so its action buttons need extra clearance under the
+     home-indicator gesture area — same `env()` pattern already used by
+     `.upload-fab`. Defensive only: unrelated to the missing-photos bug
+     (this sheet isn't part of the board's photo rendering path at all),
+     fixed while in this file per the same footgun class as the FAB. */
+  padding-bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   box-shadow: var(--shadow-polaroid-lifted);
 }
 

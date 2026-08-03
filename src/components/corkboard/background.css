@@ -28,6 +28,28 @@
   top: 0;
   left: 0;
   transform-origin: 0 0;
+  /*
+   * `will-change: transform` is only applied while the surface is actually
+   * being panned/zoomed (`data-transforming`, set in Corkboard.tsx),
+   * NOT permanently. Per MDN's own guidance, `will-change` should be
+   * applied shortly before a change and removed once it's done — leaving
+   * it on indefinitely forces the browser to keep a promoted compositing
+   * layer (here, up to SURFACE_SIZE×SURFACE_SIZE = 4000×4000 CSS px,
+   * multiplied by devicePixelRatio when rasterized on a Retina display)
+   * resident for the page's entire lifetime. Desktop GPUs have compositing
+   * memory/texture-size budgets an order of magnitude larger than mobile
+   * GPUs, so a permanently-promoted layer this large is far more likely to
+   * hit iOS Safari's tighter per-tab compositing memory limits (WebKit is
+   * known to silently fail to rasterize/paint content once those limits are
+   * exceeded, rather than erroring visibly) than to cause any visible
+   * problem on desktop — a plausible mechanism for "renders on desktop,
+   * photos missing on iPhone" that a permanent `will-change` here would
+   * make strictly worse.
+   */
+  will-change: auto;
+}
+
+.corkboard-surface[data-transforming='true'] {
   will-change: transform;
 }
 

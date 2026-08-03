@@ -1,0 +1,125 @@
+/*
+ * Album stack — new, stack-specific styling on top of the existing
+ * `.polaroid-body`/`.polaroid-media` classes from polaroid.css (§3 of
+ * design-system.md), which this file's rules are layered on top of rather
+ * than duplicated. Nothing here touches `.polaroid-card`/`.polaroid-body`/
+ * etc. themselves — only new `.album-stack-*` classes.
+ */
+
+.album-stack-peek {
+  position: absolute;
+  pointer-events: none; /* decorative — the cover card is the only hit target */
+  transform-origin: 50% 0%;
+}
+
+.album-stack-peek-body {
+  /* Same asymmetric Polaroid padding/background/shadow as a real card, but
+     no chin content is rendered inside it — a peeking corner doesn't need a
+     caption line, and the shorter body reads fine since only an edge of it
+     is ever visible past the cover card anyway. */
+  box-shadow: var(--shadow-polaroid);
+}
+
+.album-stack-peek-media {
+  aspect-ratio: 1;
+  /* `.polaroid-media` in polaroid.css hits the same issue and picks up an
+     explicit pixel-height fallback for the same reason (see Polaroid.tsx):
+     `aspect-ratio` is unsupported on iOS/iPadOS Safari < 15.4, and with no
+     other height source this box collapses to 0 there, hiding the peeking
+     photo entirely. This class always uses a fixed 1:1 crop (unlike the
+     cover card, a peek's aspect isn't computed per-photo), so the pixel
+     fallback can just be a constant: CARD_WIDTH (210) minus
+     `.polaroid-body`'s 12px left/right padding = 186px content width, and
+     at a 1:1 ratio that's also the height. */
+  height: 186px;
+}
+
+.album-stack-badge {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-ui);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--color-polaroid);
+  border: 2px solid var(--color-polaroid);
+  box-shadow: var(--shadow-pin);
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  /* Same glossy-plastic read as the pushpin head: lightened top-left,
+     true color as the base fill. Falls back to the pin-red token if
+     `data-pin-color` somehow doesn't match a known value. */
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-red) 70%, white 30%),
+    var(--color-pin-red)
+  );
+  transition: transform var(--duration-lift) ease-out;
+}
+
+.album-stack-badge:hover {
+  transform: scale(1.08);
+}
+
+.album-stack-badge[data-pin-color='red'] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-red) 70%, white 30%),
+    var(--color-pin-red)
+  );
+}
+.album-stack-badge[data-pin-color='mustard'] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-mustard) 70%, white 30%),
+    var(--color-pin-mustard)
+  );
+}
+.album-stack-badge[data-pin-color='teal'] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-teal) 70%, white 30%),
+    var(--color-pin-teal)
+  );
+}
+.album-stack-badge[data-pin-color='cream'] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-cream) 70%, white 30%),
+    var(--color-pin-cream)
+  );
+  color: var(--color-polaroid-shadow-tint);
+  border-color: var(--color-polaroid-shadow-tint);
+}
+.album-stack-badge[data-pin-color='slate'] {
+  background: radial-gradient(
+    circle at 35% 30%,
+    color-mix(in srgb, var(--color-pin-slate) 70%, white 30%),
+    var(--color-pin-slate)
+  );
+}
+
+.album-stack-collapse {
+  position: absolute;
+  transform: translate(-50%, -140%);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--color-polaroid);
+  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 92%, transparent);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  box-shadow: var(--shadow-pin);
+  white-space: nowrap;
+}
+
+.album-stack-collapse:hover {
+  background: var(--color-polaroid-shadow-tint);
+}
