@@ -1,0 +1,183 @@
+/* Upload FAB + sheet. UI chrome — uses --font-ui, not the caption font,
+ * except for the caption input itself (design-system.md §6). */
+
+.upload-fab {
+  position: fixed;
+  right: 1.25rem;
+  bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
+  width: 3.5rem;
+  height: 3.5rem;
+  border-radius: 9999px;
+  border: none;
+  background: var(--color-pin-red);
+  color: white;
+  font-size: 2rem;
+  line-height: 1;
+  font-family: var(--font-ui);
+  box-shadow: var(--shadow-polaroid);
+  cursor: pointer;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: box-shadow var(--duration-lift) ease-out;
+}
+
+.upload-fab:hover {
+  box-shadow: var(--shadow-polaroid-lifted);
+}
+
+.upload-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  z-index: 1001;
+  font-family: var(--font-ui);
+}
+
+@media (min-width: 640px) {
+  .upload-sheet-backdrop {
+    align-items: center;
+  }
+}
+
+.upload-sheet {
+  background: var(--color-polaroid);
+  color: var(--color-polaroid-shadow-tint);
+  width: 100%;
+  max-width: 28rem;
+  max-height: 85vh;
+  overflow-y: auto;
+  border-radius: 1rem 1rem 0 0;
+  padding: 1.25rem;
+  box-shadow: var(--shadow-polaroid-lifted);
+}
+
+@media (min-width: 640px) {
+  .upload-sheet {
+    border-radius: 1rem;
+  }
+}
+
+.upload-sheet-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+}
+
+.upload-sheet-header h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.upload-sheet-close {
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  line-height: 1;
+  cursor: pointer;
+  color: inherit;
+  padding: 0 0.25rem;
+}
+
+.upload-sheet-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.upload-caption-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+}
+
+.upload-caption-input {
+  font-family: var(--font-caption);
+  font-size: 1.35rem;
+  padding: 0.4rem 0.6rem;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  border-radius: 0.4rem;
+  background: white;
+}
+
+.upload-video-preview {
+  width: 100%;
+  border-radius: 0.5rem;
+  background: black;
+}
+
+.upload-sheet-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.upload-sheet-actions button {
+  font-family: var(--font-ui);
+  padding: 0.5rem 1rem;
+  border-radius: 0.4rem;
+  border: none;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.upload-sheet-actions button:last-child {
+  background: var(--color-pin-teal);
+  color: white;
+}
+
+.upload-sheet-actions button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.upload-status {
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.upload-status-error {
+  color: var(--color-pin-red);
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-items: flex-start;
+}
+
+.upload-status-error button {
+  font-family: var(--font-ui);
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.4rem;
+  border: none;
+  cursor: pointer;
+  background: rgba(0, 0, 0, 0.08);
+  color: inherit;
+}
+
+.upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.upload-progress-track {
+  width: 100%;
+  height: 0.5rem;
+  border-radius: 9999px;
+  background: rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.upload-progress-fill {
+  height: 100%;
+  background: var(--color-pin-teal);
+  transition: width 150ms ease;
+}

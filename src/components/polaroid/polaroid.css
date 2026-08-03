@@ -1,0 +1,122 @@
+/*
+ * Polaroid card — design-system.md §3.
+ */
+
+.polaroid-card {
+  position: absolute;
+  cursor: grab;
+  touch-action: none;
+}
+
+.polaroid-card[data-dragging='true'] {
+  cursor: grabbing;
+}
+
+.polaroid-body {
+  position: relative;
+  width: 100%;
+  background: var(--color-polaroid);
+  /* Asymmetric padding: tight top/left/right, wide bottom "chin" for a
+     handwritten caption line — this is what reads as a Polaroid, not a
+     generic card. */
+  padding: 12px 12px 56px 12px;
+  box-shadow: var(--shadow-polaroid);
+  transition: box-shadow var(--duration-lift) ease-out;
+  box-sizing: border-box;
+}
+
+.polaroid-card:hover .polaroid-body,
+.polaroid-card[data-dragging='true'] .polaroid-body {
+  box-shadow: var(--shadow-polaroid-lifted);
+}
+
+.polaroid-body::after {
+  /* Paper grain overlay — same feTurbulence technique as the corkboard
+     (background.css), lower intensity, no color tint. */
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='150' height='150'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/rect%3E%3C/svg%3E");
+  background-size: 150px 150px;
+}
+
+.polaroid-media {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  background: #111; /* letterbox tone while media loads */
+}
+
+.polaroid-media img,
+.polaroid-media video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.polaroid-media video {
+  border: none;
+}
+
+.polaroid-play-badge {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+
+.polaroid-play-badge svg {
+  width: 2.25rem;
+  height: 2.25rem;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.6));
+}
+
+.polaroid-chin {
+  position: absolute;
+  left: 12px;
+  right: 12px;
+  bottom: 8px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font-caption);
+  font-size: 1.35rem;
+  line-height: 1.1;
+  color: var(--color-polaroid-shadow-tint);
+  text-align: center;
+  overflow: hidden;
+  cursor: text;
+}
+
+.polaroid-chin span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 100%;
+}
+
+.polaroid-chin-input {
+  width: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--font-caption);
+  font-size: 1.35rem;
+  text-align: center;
+  color: var(--color-polaroid-shadow-tint);
+}
+
+.polaroid-chin-placeholder {
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 45%, transparent);
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  letter-spacing: 0.01em;
+}
