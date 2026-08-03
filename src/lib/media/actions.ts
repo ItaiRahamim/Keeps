@@ -11,7 +11,7 @@ import type { MediaRow, ClusterRow } from '@/lib/types';
 type MediaRecord = Omit<MediaRow, 'lat_lng'> & { lat_lng: unknown };
 
 const MEDIA_COLUMNS =
-  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, lat_lng, cluster_id, pos_x, pos_y, rotation, z_index, duration_ms, width, height, created_at';
+  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, lat_lng, captured_at, cluster_id, pos_x, pos_y, rotation, z_index, duration_ms, width, height, created_at';
 
 const CLUSTER_COLUMNS = 'id, name, cover_media_id, created_at';
 
@@ -89,6 +89,7 @@ export async function createMedia(input: {
   thumbnail_data: string; // tiny base64 LQIP
   caption?: string | null;
   lat_lng?: { x: number; y: number } | null;
+  captured_at?: string | null;
   cluster_id?: string | null;
   duration_ms?: number | null;
   width?: number | null;
@@ -110,6 +111,7 @@ export async function createMedia(input: {
       thumbnail_data: input.thumbnail_data,
       caption: input.caption ?? null,
       lat_lng: formatPoint(input.lat_lng),
+      captured_at: input.captured_at ?? null,
       cluster_id: input.cluster_id ?? null,
       duration_ms: input.duration_ms ?? null,
       width: input.width ?? null,

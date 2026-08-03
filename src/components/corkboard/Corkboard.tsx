@@ -2,7 +2,9 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { ClusterRow, MediaRow } from '@/lib/types';
+import { groupIntoAlbums } from '@/lib/media/clustering';
 import Polaroid from '../polaroid/Polaroid';
+import AlbumStack from './AlbumStack';
 import UploadSheet from '../upload/UploadSheet';
 import './background.css';
 
@@ -46,6 +48,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     null
   );
   const [isPanning, setIsPanning] = useState(false);
+  // Mirrors `isPanning` but for wheel/trackpad zoom, which has no discrete
+  // start/end event of its own — just a burst of `wheel` events. Used only
+  // to scope `will-change: transform` (see `isTransforming` below); reset
+  // shortly after the last wheel event via a timeout rather than tracked
+  // continuously, since that's all the CSS hint needs.
+  const [isZooming, setIsZooming] = useState(false);
+  const zoomIdleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Wheel/trackpad zoom. Must be a non-passive *native* listener: React
   // attaches `onWheel` as a passive listener by default, so
@@ -58,9 +67,15 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     const onWheel = (e: WheelEvent) => {
       e.preventDefault();
       setScale((s) => clamp(s * Math.exp(-e.deltaY * 0.001), MIN_SCALE, MAX_SCALE));
+      setIsZooming(true);
+      if (zoomIdleTimeoutRef.current) clearTimeout(zoomIdleTimeoutRef.current);
+      zoomIdleTimeoutRef.current = setTimeout(() => setIsZooming(false), 200);
     };
     el.addEventListener('wheel', onWheel, { passive: false });
-    return () => el.removeEventListener('wheel', onWheel);
+    return () => {
+      el.removeEventListener('wheel', onWheel);
+      if (zoomIdleTimeoutRef.current) clearTimeout(zoomIdleTimeoutRef.current);
+    };
   }, []);
 
   // Pan by dragging the empty board background. Deliberately plain pointer
@@ -133,6 +148,14 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     [pan.x, pan.y, scale]
   );
 
+  // Same-day/same-place clustering (PRD "Albums" ask) — a pure function of
+  // `items`, recomputed only when the item list itself changes (new upload,
+  // caption edit, drag commit), never per animation frame: Polaroid's own
+  // drag gesture lives entirely in Framer Motion's `x`/`y` motion values
+  // during the gesture and only calls back into `items` state once, on
+  // drag-end. See src/lib/media/clustering.ts for the grouping rules.
+  const boardItems = useMemo(() => groupIntoAlbums(items), [items]);
+
   return (
     <div
       ref={viewportRef}
@@ -145,18 +168,30 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     >
       <div
         className="corkboard-surface"
+        data-transforming={isPanning || isZooming}
         style={{ transform: surfaceTransform, width: SURFACE_SIZE, height: SURFACE_SIZE }}
       >
-        {items.map((item) => (
-          <Polaroid
-            key={item.id}
-            media={item}
-            boardScale={scale}
-            onTransformChange={handleTransformChange}
-            onBringToFront={handleBringToFront}
-            onCaptionChange={handleCaptionChange}
-          />
-        ))}
+        {boardItems.map((boardItem) =>
+          boardItem.kind === 'single' ? (
+            <Polaroid
+              key={boardItem.media.id}
+              media={boardItem.media}
+              boardScale={scale}
+              onTransformChange={handleTransformChange}
+              onBringToFront={handleBringToFront}
+              onCaptionChange={handleCaptionChange}
+            />
+          ) : (
+            <AlbumStack
+              key={boardItem.id}
+              album={boardItem}
+              boardScale={scale}
+              onTransformChange={handleTransformChange}
+              onBringToFront={handleBringToFront}
+              onCaptionChange={handleCaptionChange}
+            />
+          )
+        )}
       </div>
 
       {items.length === 0 ? (

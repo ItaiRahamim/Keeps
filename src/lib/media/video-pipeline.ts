@@ -182,6 +182,7 @@ export async function captureVideoFrame(video: HTMLVideoElement, file: File): Pr
     contentType: file.type || 'video/mp4',
     thumbnail,
     lat_lng: null,
+    captured_at: null, // videos never carry EXIF — see AGENTS.md task spec
     width: video.videoWidth || null,
     height: video.videoHeight || null,
     duration_ms: Math.round(durationSec * 1000),

@@ -19,6 +19,12 @@ import './polaroid.css';
 const CARD_WIDTH = 210;
 const MIN_ASPECT = 0.68;
 const MAX_ASPECT = 1.45;
+// `.polaroid-body`'s asymmetric padding (design-system.md §3) is
+// `12px 12px 56px 12px` and box-sizing: border-box, so `.polaroid-media`'s
+// actual content width is CARD_WIDTH minus the 12px left + 12px right
+// padding. Used below to compute an explicit pixel height as a fallback for
+// `aspect-ratio` (see MEDIA_MIN_HEIGHT_PX comment).
+const MEDIA_CONTENT_WIDTH = CARD_WIDTH - 24;
 const SPRING_TRANSITION = { type: 'spring' as const, stiffness: 300, damping: 28 };
 
 function clamp(n: number, min: number, max: number) {
@@ -89,6 +95,18 @@ export default function Polaroid({
     return clamp(media.width / media.height, MIN_ASPECT, MAX_ASPECT);
   }, [media.width, media.height]);
 
+  // `.polaroid-media` gets its height from CSS `aspect-ratio` (set via the
+  // inline style below) with no other in-flow content to size it from.
+  // `aspect-ratio` is unsupported on iOS/iPadOS Safari < 15.4 — on those
+  // engines the declaration is simply ignored, `.polaroid-media` has no
+  // other height source, and it collapses to 0, taking the `fill`-mode
+  // <Image> down with it (0×N boxes render nothing). Rather than relying on
+  // feature support, compute the same result as an explicit pixel height
+  // here — plain `height` in px needs no feature detection and works
+  // identically on every browser back to CSS1, so it removes this failure
+  // mode entirely rather than just narrowing the affected browser range.
+  const mediaHeight = useMemo(() => MEDIA_CONTENT_WIDTH / aspect, [aspect]);
+
   const playWiggle = isHovered && !shouldReduceMotion;
   const rotateTarget = shouldReduceMotion
     ? baseRotation
@@ -157,7 +175,7 @@ export default function Polaroid({
       <div className="polaroid-body">
         <div
           className="polaroid-media"
-          style={{ aspectRatio: `${aspect}` }}
+          style={{ aspectRatio: `${aspect}`, height: mediaHeight }}
           onClick={() => {
             if (media.media_type === 'video' && !videoActive) setVideoActive(true);
           }}

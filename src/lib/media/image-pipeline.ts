@@ -81,7 +81,7 @@ export async function processImageFile(file: File): Promise<ProcessedUpload> {
   }
 
   // Read EXIF from the original file, regardless of whether we transcoded.
-  const { lat_lng, width: exifWidth, height: exifHeight } = await extractImageMeta(file);
+  const { lat_lng, captured_at, width: exifWidth, height: exifHeight } = await extractImageMeta(file);
 
   const { element, width: decodedWidth, height: decodedHeight, revoke } = await loadImage(fileBlob);
   try {
@@ -94,6 +94,7 @@ export async function processImageFile(file: File): Promise<ProcessedUpload> {
       contentType,
       thumbnail,
       lat_lng,
+      captured_at,
       // Prefer the actually-decoded pixel dimensions (accounts for EXIF
       // orientation the way browsers auto-rotate <img> display) over the
       // EXIF-reported ones, falling back to EXIF only if decode somehow
