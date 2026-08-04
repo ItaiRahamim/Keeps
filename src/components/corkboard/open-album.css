@@ -278,12 +278,37 @@
   mix-blend-mode: overlay;
 }
 
+.open-album-page[data-receiving]::before {
+  position: absolute;
+  inset: 0;
+  z-index: 39;
+  content: '';
+  pointer-events: none;
+  animation: open-album-page-receive 820ms ease-out both;
+}
+
+.open-album-page[data-receiving='from-left']::before {
+  box-shadow: inset 34px 0 30px -22px color-mix(in srgb, var(--color-pin-mustard) 88%, transparent);
+}
+
+.open-album-page[data-receiving='from-right']::before {
+  box-shadow: inset -34px 0 30px -22px color-mix(in srgb, var(--color-pin-mustard) 88%, transparent);
+}
+
+@keyframes open-album-page-receive {
+  0% { opacity: 0; }
+  22% { opacity: 1; }
+  100% { opacity: 0; }
+}
+
 .open-album-memory-card {
   position: absolute;
   top: 0;
   left: 0;
-  width: 42%;
-  height: 56%;
+  /* Width and preferred aspect are supplied per photo from its natural
+     dimensions. This hard cap is the scatter model's maximum footprint. */
+  max-width: 38%;
+  max-height: 44%;
   box-sizing: border-box;
   padding: clamp(4px, 0.65vw, 8px) clamp(4px, 0.65vw, 8px) clamp(24px, 4.3vw, 48px);
   overflow: visible;
@@ -301,6 +326,58 @@
 .open-album-memory-card[data-active='true'] {
   cursor: grabbing;
   box-shadow: var(--shadow-polaroid-lifted);
+}
+
+.open-album-memory-card[data-edge-intent] {
+  outline: 3px dashed color-mix(in srgb, var(--color-pin-mustard) 72%, white);
+  outline-offset: 4px;
+}
+
+.open-album-memory-card[data-edge-intent]::after {
+  position: absolute;
+  z-index: 5;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: 1.75rem;
+  height: 1.75rem;
+  border: 2px solid var(--color-polaroid);
+  border-radius: 999px;
+  content: '→';
+  transform: translateY(-50%);
+  color: var(--color-polaroid);
+  background: var(--color-pin-mustard);
+  box-shadow: var(--shadow-pin);
+  font: 700 1rem/1 var(--font-ui);
+  opacity: 0.72;
+  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
+}
+
+.open-album-memory-card[data-edge-intent='left']::after {
+  left: -1.1rem;
+  transform: translateY(-50%) rotate(180deg);
+}
+
+.open-album-memory-card[data-edge-intent='right']::after {
+  right: -1.1rem;
+}
+
+.open-album-memory-card[data-edge-armed='true'] {
+  outline-style: solid;
+  outline-color: color-mix(in srgb, var(--color-pin-teal) 82%, white);
+}
+
+.open-album-memory-card[data-edge-armed='true']::after {
+  background: var(--color-pin-teal);
+  opacity: 1;
+}
+
+.open-album-memory-card[data-edge-armed='true'][data-edge-intent='left']::after {
+  transform: translateY(-50%) rotate(180deg) scale(1.14);
+}
+
+.open-album-memory-card[data-edge-armed='true'][data-edge-intent='right']::after {
+  transform: translateY(-50%) scale(1.14);
 }
 
 .open-album-memory-card[data-decorative='true'] {
@@ -323,7 +400,9 @@
 }
 
 .open-album-memory-photo img {
-  object-fit: cover;
+  /* Album pages show the complete memory; letterboxing is preferable to
+     silently cropping landscape edges or tall portrait details. */
+  object-fit: contain;
   pointer-events: none;
 }
 
@@ -509,17 +588,23 @@
     transform: translateY(-50%) scale(0.97);
   }
 
-  .open-album-memory-card {
-    width: 44%;
-    height: 58%;
-  }
-
   .open-album-page-number {
     display: none;
   }
 
   .open-album-gesture-hint {
     font-size: 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .open-album-page[data-receiving]::before {
+    animation: none;
+    opacity: 0.72;
+  }
+
+  .open-album-memory-card[data-edge-intent]::after {
+    transition: none;
   }
 }
 

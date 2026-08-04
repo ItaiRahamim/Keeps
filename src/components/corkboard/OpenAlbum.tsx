@@ -20,6 +20,19 @@ import './open-album.css';
 
 const MAX_ITEMS_PER_PAGE = 3;
 const KEYBOARD_NUDGE = 0.035;
+const MIN_MEDIA_ASPECT = 0.62;
+const MAX_MEDIA_ASPECT = 1.9;
+const MIN_CARD_WIDTH_PERCENT = 26;
+const MAX_CARD_WIDTH_PERCENT = 38;
+const MIN_FRAME_ASPECT = 0.5;
+const MAX_FRAME_ASPECT = 1.32;
+const EDGE_DWELL_MS = 420;
+const EDGE_ZONE_RATIO = 0.13;
+const EDGE_ZONE_MIN_PX = 28;
+const EDGE_ZONE_MAX_PX = 58;
+const TRANSFER_EDGE_INSET = 0.06;
+
+type EdgeDirection = -1 | 1;
 
 export type OpenAlbumData = {
   id: string;
@@ -38,6 +51,12 @@ export type OpenAlbumProps = {
 type Turn = {
   direction: -1 | 1;
   targetStart: number;
+};
+
+type TransferFeedback = {
+  pageIndex: number;
+  direction: EdgeDirection;
+  token: number;
 };
 
 type PageEntry = {
@@ -59,6 +78,14 @@ type DragSession = {
   originY: number;
   scaleX: number;
   scaleY: number;
+  edgeDirection: EdgeDirection | null;
+  edgeArmed: boolean;
+  edgeTimer: ReturnType<typeof setTimeout> | null;
+};
+
+type EdgeIntent = {
+  direction: EdgeDirection;
+  armed: boolean;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -77,6 +104,36 @@ function memoryTagFor(media: MediaRow | undefined): string | null {
 
 function captionFor(media: MediaRow, index: number): string {
   return media.caption?.trim() || `Photo ${index + 1}`;
+}
+
+/**
+ * Keeps malformed/missing metadata safe while letting portrait, square, and
+ * landscape memories retain visibly different physical frame proportions.
+ * Width never exceeds 38% of a page; CSS independently caps height at 44%,
+ * so three default slots always remain viable even for extreme portraits.
+ */
+function albumFrameGeometry(media: MediaRow): { widthPercent: number; frameAspect: number } {
+  const width = media.width;
+  const height = media.height;
+  const rawAspect =
+    typeof width === 'number' &&
+    typeof height === 'number' &&
+    Number.isFinite(width) &&
+    Number.isFinite(height) &&
+    width > 0 &&
+    height > 0
+      ? width / height
+      : 1;
+  const mediaAspect = clamp(rawAspect, MIN_MEDIA_ASPECT, MAX_MEDIA_ASPECT);
+  const rangeProgress = (mediaAspect - MIN_MEDIA_ASPECT) / (MAX_MEDIA_ASPECT - MIN_MEDIA_ASPECT);
+
+  return {
+    widthPercent:
+      MIN_CARD_WIDTH_PERCENT +
+      rangeProgress * (MAX_CARD_WIDTH_PERCENT - MIN_CARD_WIDTH_PERCENT),
+    // A Polaroid is slightly taller than its image to retain a caption chin.
+    frameAspect: clamp(0.76 + (mediaAspect - 1) * 0.9, MIN_FRAME_ASPECT, MAX_FRAME_ASPECT),
+  };
 }
 
 /**
@@ -105,21 +162,27 @@ function defaultPageIndex(itemIndex: number, itemCount: number): number {
 const DEFAULT_SLOTS: Record<number, Array<{ x: number; y: number }>> = {
   1: [{ x: 0.5, y: 0.48 }],
   2: [
-    { x: 0.06, y: 0.08 },
-    { x: 0.92, y: 0.86 },
+    { x: 0.04, y: 0.04 },
+    { x: 0.96, y: 0.96 },
   ],
   3: [
-    { x: 0.03, y: 0.02 },
-    { x: 0.94, y: 0.16 },
-    { x: 0.46, y: 0.96 },
+    { x: 0.04, y: 0.04 },
+    { x: 0.96, y: 0.04 },
+    { x: 0.5, y: 0.96 },
   ],
 };
 
-/** Stable semi-random layout: tactile jitter without hydration reshuffling. */
+/**
+ * Stable semi-random layout: tactile jitter without hydration reshuffling.
+ * The three anchors occupy two separated rows. Card sizing is capped by the
+ * album CSS, and the deliberately small ±2.5% travel jitter preserves the
+ * gap between their maximum bounding boxes instead of turning "randomness"
+ * into an unreadable pile.
+ */
 function defaultPlacement(media: MediaRow, pageIndex: number, slotIndex: number, pageSize: number): AlbumPlacement {
   const slot = DEFAULT_SLOTS[pageSize]?.[slotIndex] ?? DEFAULT_SLOTS[1][0];
-  const jitterX = ((hashString(`${media.id}:album-x`) % 1001) / 1000 - 0.5) * 0.08;
-  const jitterY = ((hashString(`${media.id}:album-y`) % 1001) / 1000 - 0.5) * 0.08;
+  const jitterX = ((hashString(`${media.id}:album-x`) % 1001) / 1000 - 0.5) * 0.05;
+  const jitterY = ((hashString(`${media.id}:album-y`) % 1001) / 1000 - 0.5) * 0.05;
   return {
     pageIndex,
     x: clamp(slot.x + jitterX, 0, 1),
@@ -146,6 +209,10 @@ function storedPlacement(media: MediaRow, maxPageIndex: number): AlbumPlacement 
   };
 }
 
+function isLegacyOrigin(placement: AlbumPlacement): boolean {
+  return placement.pageIndex === 0 && placement.x === 0 && placement.y === 0;
+}
+
 function buildAlbumLeaves(
   mediaItems: MediaRow[],
   overrides: Record<string, AlbumPlacement>
@@ -156,9 +223,26 @@ function buildAlbumLeaves(
   // persisted data from allocating thousands of empty DOM pages.
   const maxPageIndex = Math.max(0, Math.ceil(mediaItems.length / 2) - 1);
   const grouped = new Map<number, Array<Omit<PageEntry, 'placement'> & { placement: AlbumPlacement | null }>>();
+  let legacyOriginClaimed = false;
 
   mediaItems.forEach((media, mediaIndex) => {
-    const saved = overrides[media.id] ?? storedPlacement(media, maxPageIndex);
+    const optimistic = Object.prototype.hasOwnProperty.call(overrides, media.id)
+      ? overrides[media.id]
+      : null;
+    let saved = optimistic ?? storedPlacement(media, maxPageIndex);
+
+    // An early/legacy schema revision initialized every row to page 0 at
+    // (0,0), which made an album render as one perfectly-overlapped card.
+    // Keep the first origin as a legitimate exact persisted position, but
+    // treat subsequent identical DB origins as unpositioned. They then flow
+    // through balanced page assignment and the deterministic safe slots.
+    // An in-session optimistic placement always wins, including an explicit
+    // drag to the exact origin, so the UI never rewrites the user's gesture.
+    if (!optimistic && saved && isLegacyOrigin(saved)) {
+      if (legacyOriginClaimed) saved = null;
+      else legacyOriginClaimed = true;
+    }
+
     const pageIndex = saved?.pageIndex ?? defaultPageIndex(mediaIndex, mediaItems.length);
     const entry = { media, mediaIndex, placement: saved };
     const page = grouped.get(pageIndex);
@@ -186,8 +270,10 @@ type AlbumMemoryCardProps = {
   decorative: boolean;
   active: boolean;
   order: number;
+  maxPageIndex: number;
   onActiveChange: (id: string | null) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => void;
+  onTransfer: (media: MediaRow, placement: AlbumPlacement, direction: EdgeDirection) => void;
 };
 
 function AlbumMemoryCard({
@@ -196,16 +282,20 @@ function AlbumMemoryCard({
   decorative,
   active,
   order,
+  maxPageIndex,
   onActiveChange,
   onCommit,
+  onTransfer,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
+  const [edgeIntent, setEdgeIntent] = useState<EdgeIntent | null>(null);
   const x = useMotionValue(0);
   const y = useMotionValue(0);
   const { media, mediaIndex, placement } = entry;
   const caption = captionFor(media, mediaIndex);
   const source = media.thumbnail_url ?? (media.media_type === 'image' ? media.original_url : null);
+  const frame = useMemo(() => albumFrameGeometry(media), [media]);
 
   const syncFromPlacement = useCallback(() => {
     const page = pageRef.current;
@@ -228,11 +318,55 @@ function AlbumMemoryCard({
     return () => observer.disconnect();
   }, [pageRef, syncFromPlacement]);
 
+  useEffect(
+    () => () => {
+      const timer = dragSessionRef.current?.edgeTimer;
+      if (timer) clearTimeout(timer);
+    },
+    []
+  );
+
+  const updateEdgeIntent = useCallback(
+    (clientX: number, pageRect: DOMRect) => {
+      const session = dragSessionRef.current;
+      if (!session) return;
+      const edgeZone = clamp(pageRect.width * EDGE_ZONE_RATIO, EDGE_ZONE_MIN_PX, EDGE_ZONE_MAX_PX);
+      const candidate: EdgeDirection | null =
+        clientX <= pageRect.left + edgeZone && placement.pageIndex > 0
+          ? -1
+          : clientX >= pageRect.right - edgeZone && placement.pageIndex < maxPageIndex
+            ? 1
+            : null;
+
+      if (candidate === session.edgeDirection) return;
+      if (session.edgeTimer) clearTimeout(session.edgeTimer);
+      session.edgeTimer = null;
+      session.edgeDirection = candidate;
+      session.edgeArmed = false;
+
+      if (candidate === null) {
+        setEdgeIntent(null);
+        return;
+      }
+
+      setEdgeIntent({ direction: candidate, armed: false });
+      session.edgeTimer = setTimeout(() => {
+        const current = dragSessionRef.current;
+        if (!current || current.pointerId !== session.pointerId || current.edgeDirection !== candidate) return;
+        current.edgeArmed = true;
+        current.edgeTimer = null;
+        setEdgeIntent({ direction: candidate, armed: true });
+      }, EDGE_DWELL_MS);
+    },
+    [maxPageIndex, placement.pageIndex]
+  );
+
   const finishDrag = useCallback(
-    (target: HTMLDivElement, pointerId: number) => {
+    (target: HTMLDivElement, pointerId: number, allowTransfer: boolean) => {
       const session = dragSessionRef.current;
       if (!session || session.pointerId !== pointerId) return;
       dragSessionRef.current = null;
+      if (session.edgeTimer) clearTimeout(session.edgeTimer);
       if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
 
       const page = pageRef.current;
@@ -240,14 +374,30 @@ function AlbumMemoryCard({
       if (!page || !card) return;
       const maxX = Math.max(0, page.clientWidth - card.offsetWidth);
       const maxY = Math.max(0, page.clientHeight - card.offsetHeight);
+      const normalizedY = maxY > 0 ? clamp(y.get() / maxY, 0, 1) : 0.5;
       onActiveChange(null);
+      setEdgeIntent(null);
+
+      if (allowTransfer && session.edgeDirection !== null && session.edgeArmed) {
+        onTransfer(
+          media,
+          {
+            pageIndex: placement.pageIndex + session.edgeDirection,
+            x: session.edgeDirection === 1 ? TRANSFER_EDGE_INSET : 1 - TRANSFER_EDGE_INSET,
+            y: normalizedY,
+          },
+          session.edgeDirection
+        );
+        return;
+      }
+
       onCommit(media, {
         pageIndex: placement.pageIndex,
         x: maxX > 0 ? clamp(x.get() / maxX, 0, 1) : 0.5,
-        y: maxY > 0 ? clamp(y.get() / maxY, 0, 1) : 0.5,
+        y: normalizedY,
       });
     },
-    [media, onActiveChange, onCommit, pageRef, placement.pageIndex, x, y]
+    [media, onActiveChange, onCommit, onTransfer, pageRef, placement.pageIndex, x, y]
   );
 
   const nudge = useCallback(
@@ -267,13 +417,21 @@ function AlbumMemoryCard({
       className="open-album-memory-card"
       data-active={active}
       data-decorative={decorative}
+      data-edge-intent={edgeIntent ? (edgeIntent.direction === -1 ? 'left' : 'right') : undefined}
+      data-edge-armed={edgeIntent?.armed || undefined}
       tabIndex={decorative ? -1 : 0}
       role={decorative ? undefined : 'group'}
       aria-roledescription={decorative ? undefined : 'draggable photo'}
-      aria-label={decorative ? undefined : `${caption}. Drag to arrange on album page ${placement.pageIndex + 1}.`}
+      aria-label={
+        decorative
+          ? undefined
+          : `${caption}. Drag to arrange on album page ${placement.pageIndex + 1}; hold at an outer edge to move pages.`
+      }
       style={{
         x,
         y,
+        width: `${frame.widthPercent}%`,
+        aspectRatio: frame.frameAspect,
         rotate: rotationForId(`${media.id}:album`),
         zIndex: active ? 20 : order + 1,
       }}
@@ -296,6 +454,9 @@ function AlbumMemoryCard({
           originY: y.get(),
           scaleX: page.clientWidth > 0 ? pageRect.width / page.clientWidth : 1,
           scaleY: page.clientHeight > 0 ? pageRect.height / page.clientHeight : 1,
+          edgeDirection: null,
+          edgeArmed: false,
+          edgeTimer: null,
         };
         onActiveChange(media.id);
       }}
@@ -309,6 +470,8 @@ function AlbumMemoryCard({
         if (!page || !card) return;
         const maxX = Math.max(0, page.clientWidth - card.offsetWidth);
         const maxY = Math.max(0, page.clientHeight - card.offsetHeight);
+        const pageRect = page.getBoundingClientRect();
+        updateEdgeIntent(event.clientX, pageRect);
         x.set(
           clamp(
             session.originX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
@@ -327,13 +490,13 @@ function AlbumMemoryCard({
       onPointerUp={(event) => {
         event.preventDefault();
         event.stopPropagation();
-        finishDrag(event.currentTarget, event.pointerId);
+        finishDrag(event.currentTarget, event.pointerId, true);
       }}
       onPointerCancel={(event) => {
         event.stopPropagation();
-        finishDrag(event.currentTarget, event.pointerId);
+        finishDrag(event.currentTarget, event.pointerId, false);
       }}
-      onLostPointerCapture={(event) => finishDrag(event.currentTarget, event.pointerId)}
+      onLostPointerCapture={(event) => finishDrag(event.currentTarget, event.pointerId, false)}
       onKeyDown={(event) => {
         if (decorative) return;
         const step = event.shiftKey ? KEYBOARD_NUDGE * 3 : KEYBOARD_NUDGE;
@@ -387,10 +550,20 @@ function AlbumMemoryCard({
 type AlbumPageProps = {
   leaf: AlbumLeaf | undefined;
   decorative?: boolean;
+  maxPageIndex: number;
+  receivingDirection?: EdgeDirection | null;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => void;
+  onTransfer: (media: MediaRow, placement: AlbumPlacement, direction: EdgeDirection) => void;
 };
 
-function AlbumPage({ leaf, decorative = false, onCommit }: AlbumPageProps) {
+function AlbumPage({
+  leaf,
+  decorative = false,
+  maxPageIndex,
+  receivingDirection = null,
+  onCommit,
+  onTransfer,
+}: AlbumPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const pageIndex = leaf?.index ?? 0;
@@ -401,6 +574,9 @@ function AlbumPage({ leaf, decorative = false, onCommit }: AlbumPageProps) {
       ref={pageRef}
       className="open-album-page open-album-mini-corkboard"
       data-page-tone={pageIndex % 4}
+      data-receiving={
+        receivingDirection === null ? undefined : receivingDirection === -1 ? 'from-right' : 'from-left'
+      }
       aria-label={decorative ? undefined : `Album page ${pageIndex + 1} with ${entries.length} photos`}
     >
       {entries.length === 0 ? <span className="open-album-page-flourish" aria-hidden="true" /> : null}
@@ -412,8 +588,10 @@ function AlbumPage({ leaf, decorative = false, onCommit }: AlbumPageProps) {
           decorative={decorative}
           active={activeId === entry.media.id}
           order={order}
+          maxPageIndex={maxPageIndex}
           onActiveChange={setActiveId}
           onCommit={onCommit}
+          onTransfer={onTransfer}
         />
       ))}
       {leaf ? <span className="open-album-page-number" aria-hidden="true">{pageIndex + 1}</span> : null}
@@ -435,6 +613,8 @@ function OpenAlbumDialog({
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const swipeStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const saveSequenceRef = useRef(0);
+  const transferSequenceRef = useRef(0);
+  const transferFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [placementOverrides, setPlacementOverrides] = useState<Record<string, AlbumPlacement>>({});
   const [saveMessage, setSaveMessage] = useState('');
   const leaves = useMemo(
@@ -445,6 +625,7 @@ function OpenAlbumDialog({
   const safeInitialPage = clamp(Math.floor(initialPage), 0, Math.max(0, leaves.length - 1));
   const [spreadStart, setSpreadStart] = useState(Math.floor(safeInitialPage / 2) * 2);
   const [turn, setTurn] = useState<Turn | null>(null);
+  const [transferFeedback, setTransferFeedback] = useState<TransferFeedback | null>(null);
   const visibleSpreadStart = Math.min(spreadStart, lastSpreadStart);
 
   const title = memoryTagFor(album.items[0]) ?? 'Memory album';
@@ -481,6 +662,56 @@ function OpenAlbumDialog({
     setTurn({ direction, targetStart });
   }, [lastSpreadStart, shouldReduceMotion, turn, visibleSpreadStart]);
 
+  const commitTransfer = useCallback(
+    (media: MediaRow, placement: AlbumPlacement, direction: EdgeDirection) => {
+      const sourcePageIndex = placement.pageIndex - direction;
+      const sourceLeaf = leaves[sourcePageIndex];
+      const targetLeaf = leaves[placement.pageIndex];
+      if (!sourceLeaf || !targetLeaf) return;
+
+      // A full destination cannot accept a fourth card, and moving out of a
+      // two-card source would otherwise leave a sparse single-photo page.
+      // Swap the destination card nearest the shared edge in those cases so
+      // both bounded corkboards retain their intended 2–3 photo density.
+      const shouldSwap =
+        targetLeaf.entries.length >= MAX_ITEMS_PER_PAGE ||
+        (sourceLeaf.entries.length <= 2 && targetLeaf.entries.length > 0);
+      if (shouldSwap) {
+        const displaced = [...targetLeaf.entries].sort((a, b) =>
+          direction === 1
+            ? a.placement.x - b.placement.x
+            : b.placement.x - a.placement.x
+        )[0];
+        if (displaced) {
+          commitPlacement(displaced.media, {
+            pageIndex: sourcePageIndex,
+            x: direction === 1 ? 1 - TRANSFER_EDGE_INSET : TRANSFER_EDGE_INSET,
+            y: displaced.placement.y,
+          });
+        }
+      }
+
+      commitPlacement(media, placement);
+
+      transferSequenceRef.current += 1;
+      const feedback = {
+        pageIndex: placement.pageIndex,
+        direction,
+        token: transferSequenceRef.current,
+      };
+      setTransferFeedback(feedback);
+      if (transferFeedbackTimerRef.current) clearTimeout(transferFeedbackTimerRef.current);
+      transferFeedbackTimerRef.current = setTimeout(() => {
+        setTransferFeedback((current) => (current?.token === feedback.token ? null : current));
+        transferFeedbackTimerRef.current = null;
+      }, 850);
+
+      const targetSpreadStart = Math.floor(placement.pageIndex / 2) * 2;
+      if (targetSpreadStart !== visibleSpreadStart) requestTurn(direction);
+    },
+    [commitPlacement, leaves, requestTurn, visibleSpreadStart]
+  );
+
   useEffect(() => {
     const previouslyFocused = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     const previousOverflow = document.body.style.overflow;
@@ -489,6 +720,7 @@ function OpenAlbumDialog({
 
     return () => {
       document.body.style.overflow = previousOverflow;
+      if (transferFeedbackTimerRef.current) clearTimeout(transferFeedbackTimerRef.current);
       previouslyFocused?.focus();
     };
   }, []);
@@ -624,10 +856,28 @@ function OpenAlbumDialog({
           <div className="open-album-cover-edge" aria-hidden="true" />
           <div className="open-album-binding" aria-hidden="true" />
           <div className="open-album-static-page open-album-static-page-left">
-            <AlbumPage leaf={leaves[baseLeftIndex]} decorative={Boolean(turn)} onCommit={commitPlacement} />
+            <AlbumPage
+              leaf={leaves[baseLeftIndex]}
+              decorative={Boolean(turn)}
+              maxPageIndex={leaves.length - 1}
+              receivingDirection={
+                transferFeedback?.pageIndex === baseLeftIndex ? transferFeedback.direction : null
+              }
+              onCommit={commitPlacement}
+              onTransfer={commitTransfer}
+            />
           </div>
           <div className="open-album-static-page open-album-static-page-right">
-            <AlbumPage leaf={leaves[baseRightIndex]} decorative={Boolean(turn)} onCommit={commitPlacement} />
+            <AlbumPage
+              leaf={leaves[baseRightIndex]}
+              decorative={Boolean(turn)}
+              maxPageIndex={leaves.length - 1}
+              receivingDirection={
+                transferFeedback?.pageIndex === baseRightIndex ? transferFeedback.direction : null
+              }
+              onCommit={commitPlacement}
+              onTransfer={commitTransfer}
+            />
           </div>
 
           {turn ? (
@@ -644,10 +894,22 @@ function OpenAlbumDialog({
               aria-hidden="true"
             >
               <div className="open-album-sheet-face open-album-sheet-front">
-                <AlbumPage leaf={leaves[sheetFrontIndex]} decorative onCommit={commitPlacement} />
+                <AlbumPage
+                  leaf={leaves[sheetFrontIndex]}
+                  decorative
+                  maxPageIndex={leaves.length - 1}
+                  onCommit={commitPlacement}
+                  onTransfer={commitTransfer}
+                />
               </div>
               <div className="open-album-sheet-face open-album-sheet-back">
-                <AlbumPage leaf={leaves[sheetBackIndex]} decorative onCommit={commitPlacement} />
+                <AlbumPage
+                  leaf={leaves[sheetBackIndex]}
+                  decorative
+                  maxPageIndex={leaves.length - 1}
+                  onCommit={commitPlacement}
+                  onTransfer={commitTransfer}
+                />
               </div>
             </motion.div>
           ) : null}
@@ -671,7 +933,9 @@ function OpenAlbumDialog({
         <span>Pages {visibleLeafIndexes} of {leaves.length}</span>
         <span className="open-album-sr-only">. {visibleCaptions}</span>
       </div>
-      <p className="open-album-gesture-hint" aria-hidden="true">Drag photos to arrange · swipe the page to flip</p>
+      <p className="open-album-gesture-hint" aria-hidden="true">
+        Drag to arrange · hold at an outer edge to move pages · swipe to flip
+      </p>
       <span className="open-album-sr-only" aria-live="polite" aria-atomic="true">{saveMessage}</span>
     </motion.section>
   );
