@@ -30,6 +30,13 @@
   cursor: grabbing;
 }
 
+/* The focused album is modal. Remove the upload control from both pointer
+   and accessibility hit testing until the closing animation has finished. */
+.corkboard-viewport[data-album-open='true'] .upload-fab {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 .corkboard-surface {
   position: absolute;
   top: 0;

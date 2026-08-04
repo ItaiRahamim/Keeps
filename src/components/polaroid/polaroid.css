@@ -12,6 +12,15 @@
   cursor: grabbing;
 }
 
+.polaroid-card[data-activatable='true']:not([data-dragging='true']) {
+  cursor: pointer;
+}
+
+.polaroid-card[data-activatable='true']:focus-visible {
+  outline: 3px solid var(--color-pin-mustard);
+  outline-offset: 7px;
+}
+
 .polaroid-body {
   position: relative;
   width: 100%;

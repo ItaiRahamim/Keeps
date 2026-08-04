@@ -59,6 +59,12 @@ export type PolaroidProps = {
   ) => void;
   onBringToFront: (id: string) => number;
   onCaptionChange?: (id: string, caption: string) => void;
+  /** Optional tap/keyboard action used when this card represents an album
+   * stack. Framer's tap recognizer cancels after a drag, so moving the
+   * Polaroid never accidentally opens the album on pointer-up. */
+  onActivate?: () => void;
+  activationLabel?: string;
+  layoutId?: string;
 };
 
 export default function Polaroid({
@@ -67,6 +73,9 @@ export default function Polaroid({
   onTransformChange,
   onBringToFront,
   onCaptionChange,
+  onActivate,
+  activationLabel,
+  layoutId,
 }: PolaroidProps) {
   const shouldReduceMotion = useReducedMotion();
   const [isHovered, setIsHovered] = useState(false);
@@ -129,8 +138,13 @@ export default function Polaroid({
 
   return (
     <motion.div
+      layoutId={layoutId}
       className="polaroid-card"
       data-dragging={isDragging}
+      data-activatable={onActivate ? 'true' : undefined}
+      role={onActivate ? 'button' : undefined}
+      tabIndex={onActivate ? 0 : undefined}
+      aria-label={onActivate ? activationLabel : undefined}
       style={{
         left: media.pos_x,
         top: media.pos_y,
@@ -149,6 +163,15 @@ export default function Polaroid({
       // A card owns its one-finger drag. Do not let the pointerdown reach
       // Corkboard's delegated background handler and start a camera pan too.
       onPointerDown={(e) => e.stopPropagation()}
+      onTap={onActivate}
+      onKeyDown={(event) => {
+        // Framer maps Enter to onTap for keyboard users. A div with
+        // role="button" does not receive native Space activation, so add
+        // that one missing button behavior without double-firing Enter.
+        if (!onActivate || event.target !== event.currentTarget || event.key !== ' ') return;
+        event.preventDefault();
+        onActivate();
+      }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
       onDragStart={() => {
@@ -180,6 +203,7 @@ export default function Polaroid({
           className="polaroid-media"
           style={{ aspectRatio: `${aspect}`, height: mediaHeight }}
           onClick={() => {
+            if (onActivate) return;
             if (media.media_type === 'video' && !videoActive) setVideoActive(true);
           }}
         >
@@ -226,7 +250,12 @@ export default function Polaroid({
           ) : null}
         </div>
 
-        <div className="polaroid-chin" onDoubleClick={() => setIsEditingCaption(true)}>
+        <div
+          className="polaroid-chin"
+          onDoubleClick={() => {
+            if (!onActivate) setIsEditingCaption(true);
+          }}
+        >
           {isEditingCaption ? (
             <input
               autoFocus

@@ -106,6 +106,34 @@
   font-size: 0.8rem;
 }
 
+.upload-memory-tag-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.7rem 0.75rem;
+  border: 1px dashed color-mix(in srgb, var(--color-pin-teal) 48%, transparent);
+  border-radius: 0.65rem;
+  background: color-mix(in srgb, var(--color-pin-teal) 8%, var(--color-polaroid));
+  font-size: 0.8rem;
+}
+
+.upload-memory-tag-label > span {
+  align-self: flex-start;
+  padding: 0.08rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-pin-mustard) 38%, transparent);
+  font-size: 0.65rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.upload-memory-tag-label small {
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 68%, transparent);
+  font-size: 0.7rem;
+  line-height: 1.35;
+}
+
 .upload-caption-input {
   font-family: var(--font-caption);
   font-size: 1.35rem;
@@ -114,6 +142,24 @@
   border-radius: 0.4rem;
   background: var(--color-polaroid);
   color: var(--color-polaroid-shadow-tint);
+}
+
+.upload-memory-tag-input {
+  width: 100%;
+  box-sizing: border-box;
+  font-family: var(--font-ui);
+  font-size: 0.95rem;
+  padding: 0.5rem 0.65rem;
+  border: 1px solid color-mix(in srgb, var(--color-pin-teal) 36%, transparent);
+  border-radius: 0.45rem;
+  outline: none;
+  background: color-mix(in srgb, var(--color-polaroid) 92%, var(--color-pin-mustard));
+  color: var(--color-polaroid-shadow-tint);
+}
+
+.upload-memory-tag-input:focus {
+  border-color: var(--color-pin-teal);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-pin-teal) 16%, transparent);
 }
 
 .upload-video-preview {

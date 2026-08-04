@@ -11,6 +11,7 @@ export type MediaRow = {
   thumbnail_url: string | null;
   thumbnail_data: string | null;
   caption: string | null;
+  memory_tag: string | null;
   lat_lng: { x: number; y: number } | null;
   captured_at: string | null;
   cluster_id: string | null;

@@ -1,11 +1,12 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { motion, useMotionValue } from 'framer-motion';
+import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { ClusterRow, MediaRow } from '@/lib/types';
-import { groupIntoAlbums } from '@/lib/media/clustering';
+import { groupIntoAlbums, type BoardItem } from '@/lib/media/clustering';
 import Polaroid from '../polaroid/Polaroid';
 import AlbumStack from './AlbumStack';
+import OpenAlbum from './OpenAlbum';
 import UploadSheet from '../upload/UploadSheet';
 import './background.css';
 
@@ -88,6 +89,23 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
 
   const [items, setItems] = useState<MediaRow[]>(media);
   const zCounterRef = useRef(items.reduce((max, item) => Math.max(max, item.z_index), 0));
+  // Recomputed only when the client-owned item list changes. Because the
+  // focused album below is selected from this live value, `onCreated`
+  // updates both the board stack and an already-open tagged album at once.
+  const boardItems = useMemo(() => groupIntoAlbums(items), [items]);
+  const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
+  const activeAlbum = useMemo(() => {
+    if (!activeAlbumId) return null;
+    return (
+      boardItems.find(
+        (item): item is Extract<BoardItem, { kind: 'album' }> =>
+          item.kind === 'album' && item.id === activeAlbumId
+      ) ?? null
+    );
+  }, [activeAlbumId, boardItems]);
+  const isAlbumOpen = activeAlbum !== null;
+  const [isAlbumClosing, setIsAlbumClosing] = useState(false);
+  const isAlbumModalActive = isAlbumOpen || isAlbumClosing;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -99,6 +117,8 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   const cameraY = useMotionValue(0);
   const cameraScale = useMotionValue(1);
   const [isPanning, setIsPanning] = useState(false);
+  const cameraBeforeAlbumRef = useRef<Camera | null>(null);
+  const albumOpenRef = useRef(false);
   // Mirrors `isPanning` but for wheel/trackpad zoom, which has no discrete
   // start/end event of its own — just a burst of `wheel` events. Used only
   // to scope `will-change: transform` (see `isTransforming` below); reset
@@ -141,7 +161,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         left: rect.left,
         top: rect.top,
       };
-      applyCamera(cameraRef.current);
+      // Keep the camera frozen while the album is modal. We still record
+      // the latest viewport bounds so the next board gesture uses accurate
+      // coordinates after an orientation/window-size change.
+      if (!albumOpenRef.current) applyCamera(cameraRef.current);
     };
 
     updateViewportSize();
@@ -159,6 +182,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     const el = viewportRef.current;
     if (!el) return;
     const onWheel = (e: WheelEvent) => {
+      // The focused album is modal: wheel input must neither mutate the
+      // camera behind it nor bubble into page-level scrolling.
+      if (isAlbumModalActive) {
+        e.preventDefault();
+        return;
+      }
+
       const target = e.target;
       if (target instanceof Element && target.closest('.upload-fab, .upload-sheet-backdrop')) return;
 
@@ -186,7 +216,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       el.removeEventListener('wheel', onWheel);
       if (zoomIdleTimeoutRef.current) clearTimeout(zoomIdleTimeoutRef.current);
     };
-  }, [applyCamera]);
+  }, [applyCamera, isAlbumModalActive]);
 
   const startPan = useCallback((pointerId: number, point: PointerPosition) => {
     cameraGestureRef.current = {
@@ -222,6 +252,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   // the object and the camera.
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (isAlbumModalActive) return;
       if (e.target !== e.currentTarget && e.target !== surfaceRef.current) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
@@ -242,11 +273,12 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       if (pointerIds.length === 2) startPinch([pointerIds[0], pointerIds[1]]);
       setIsPanning(true);
     },
-    [startPan, startPinch]
+    [isAlbumModalActive, startPan, startPinch]
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
+      if (isAlbumModalActive) return;
       if (!activePointersRef.current.has(e.pointerId)) return;
       e.preventDefault();
       const { left, top } = viewportSizeRef.current;
@@ -282,7 +314,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         scale: nextScale,
       });
     },
-    [applyCamera]
+    [applyCamera, isAlbumModalActive]
   );
 
   const handlePointerEnd = useCallback(
@@ -351,19 +383,42 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     return { x: centerX + jitter(), y: centerY + jitter() };
   }, []);
 
-  // Same-day/same-place clustering (PRD "Albums" ask) — a pure function of
-  // `items`, recomputed only when the item list itself changes (new upload,
-  // caption edit, drag commit), never per animation frame: Polaroid's own
-  // drag gesture lives entirely in Framer Motion's `x`/`y` motion values
-  // during the gesture and only calls back into `items` state once, on
-  // drag-end. See src/lib/media/clustering.ts for the grouping rules.
-  const boardItems = useMemo(() => groupIntoAlbums(items), [items]);
+  const handleOpenAlbum = useCallback((albumId: string) => {
+    // Defensive gesture cleanup means a cover tap can never leave a captured
+    // pointer driving the hidden camera while the album transition begins.
+    activePointersRef.current.clear();
+    cameraGestureRef.current = null;
+    setIsPanning(false);
+    cameraBeforeAlbumRef.current = { ...cameraRef.current };
+    albumOpenRef.current = true;
+    setIsAlbumClosing(false);
+    setActiveAlbumId(albumId);
+  }, []);
+
+  const handleCloseAlbum = useCallback(() => {
+    const savedCamera = cameraBeforeAlbumRef.current;
+    setActiveAlbumId(null);
+    setIsAlbumClosing(true);
+    cameraBeforeAlbumRef.current = null;
+
+    // The surface remains mounted, and its MotionValues are normally already
+    // unchanged. Re-applying this snapshot is a guard against any late input
+    // event during the opening transition and guarantees an exact return to
+    // the board location the user left.
+    if (savedCamera) {
+      cameraRef.current = savedCamera;
+      cameraX.set(savedCamera.x);
+      cameraY.set(savedCamera.y);
+      cameraScale.set(savedCamera.scale);
+    }
+  }, [cameraScale, cameraX, cameraY]);
 
   return (
     <div
       ref={viewportRef}
       className="corkboard-viewport cork-texture"
       data-panning={isPanning}
+      data-album-open={isAlbumModalActive}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
@@ -374,6 +429,8 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         ref={surfaceRef}
         className="corkboard-surface"
         data-transforming={isPanning || isZooming}
+        aria-hidden={isAlbumModalActive}
+        inert={isAlbumModalActive ? true : undefined}
         style={{ x: cameraX, y: cameraY, scale: cameraScale, width: SURFACE_SIZE, height: SURFACE_SIZE }}
       >
         {boardItems.map((boardItem) =>
@@ -394,6 +451,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
               onTransformChange={handleTransformChange}
               onBringToFront={handleBringToFront}
               onCaptionChange={handleCaptionChange}
+              onOpen={handleOpenAlbum}
             />
           )
         )}
@@ -409,6 +467,23 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       ) : null}
 
       <UploadSheet onCreated={handleCreated} getDropPosition={getDropPosition} />
+
+      <AnimatePresence
+        mode="wait"
+        onExitComplete={() => {
+          albumOpenRef.current = false;
+          setIsAlbumClosing(false);
+        }}
+      >
+        {activeAlbum ? (
+          <OpenAlbum
+            key={activeAlbum.id}
+            album={activeAlbum}
+            onClose={handleCloseAlbum}
+            layoutId={`album-${activeAlbum.id}`}
+          />
+        ) : null}
+      </AnimatePresence>
     </div>
   );
 }

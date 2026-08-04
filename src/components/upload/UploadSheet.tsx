@@ -34,6 +34,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
   const [stage, setStage] = useState<Stage>('idle');
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [caption, setCaption] = useState('');
+  const [memoryTag, setMemoryTag] = useState('');
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -42,6 +43,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
     setStage('idle');
     setVideoFile(null);
     setCaption('');
+    setMemoryTag('');
     setProgress(0);
     setError(null);
   }, []);
@@ -75,6 +77,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
           thumbnail_url: uploaded.thumbnailUrl,
           thumbnail_data: processed.thumbnail.lqip,
           caption: caption.trim() || null,
+          memory_tag: memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null,
           lat_lng: processed.lat_lng,
           captured_at: processed.captured_at,
           duration_ms: processed.duration_ms,
@@ -108,7 +111,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
         setStage('error');
       }
     },
-    [caption, getDropPosition, onCreated, closeSheet, router]
+    [caption, memoryTag, getDropPosition, onCreated, closeSheet, router]
   );
 
   const handleFileSelected = useCallback(
@@ -150,6 +153,27 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
 
             {stage === 'idle' ? (
               <div className="upload-sheet-body">
+                <label className="upload-caption-label">
+                  Caption
+                  <input
+                    className="upload-caption-input"
+                    value={caption}
+                    onChange={(e) => setCaption(e.target.value)}
+                    placeholder="Write a little note…"
+                  />
+                </label>
+                <label className="upload-memory-tag-label">
+                  Memory or ticket name <span>Optional</span>
+                  <input
+                    className="upload-memory-tag-input"
+                    value={memoryTag}
+                    onChange={(e) => setMemoryTag(e.target.value)}
+                    placeholder="Summer in Jaffa, concert tickets…"
+                    maxLength={80}
+                    autoComplete="off"
+                  />
+                  <small>Photos with the same name will share one album.</small>
+                </label>
                 <input
                   ref={fileInputRef}
                   type="file"
@@ -160,15 +184,6 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
                     e.target.value = '';
                   }}
                 />
-                <label className="upload-caption-label">
-                  Caption
-                  <input
-                    className="upload-caption-input"
-                    value={caption}
-                    onChange={(e) => setCaption(e.target.value)}
-                    placeholder="Write a little note…"
-                  />
-                </label>
               </div>
             ) : null}
 

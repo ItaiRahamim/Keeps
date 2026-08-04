@@ -11,7 +11,7 @@ import type { MediaRow, ClusterRow } from '@/lib/types';
 type MediaRecord = Omit<MediaRow, 'lat_lng'> & { lat_lng: unknown };
 
 const MEDIA_COLUMNS =
-  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, lat_lng, captured_at, cluster_id, pos_x, pos_y, rotation, z_index, duration_ms, width, height, created_at';
+  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, rotation, z_index, duration_ms, width, height, created_at';
 
 const CLUSTER_COLUMNS = 'id, name, cover_media_id, created_at';
 
@@ -34,6 +34,20 @@ function parsePoint(raw: unknown): { x: number; y: number } | null {
 function formatPoint(point: { x: number; y: number } | null | undefined): string | null {
   if (!point) return null;
   return `(${point.x},${point.y})`;
+}
+
+/**
+ * Keeps the user-facing casing while making stored tags predictable. Empty
+ * or whitespace-only values become NULL so they follow automatic EXIF
+ * clustering rather than creating a hidden, empty manual album.
+ */
+function normalizeMemoryTagForStorage(tag: string | null | undefined): string | null {
+  if (typeof tag !== 'string') return null;
+  const normalized = tag.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  if (normalized.length > 80) {
+    throw new Error('Memory or ticket name must be 80 characters or fewer');
+  }
+  return normalized || null;
 }
 
 function toMediaRow(record: MediaRecord): MediaRow {
@@ -88,6 +102,7 @@ export async function createMedia(input: {
   thumbnail_url: string;
   thumbnail_data: string; // tiny base64 LQIP
   caption?: string | null;
+  memory_tag?: string | null;
   lat_lng?: { x: number; y: number } | null;
   captured_at?: string | null;
   cluster_id?: string | null;
@@ -110,6 +125,7 @@ export async function createMedia(input: {
       thumbnail_url: input.thumbnail_url,
       thumbnail_data: input.thumbnail_data,
       caption: input.caption ?? null,
+      memory_tag: normalizeMemoryTagForStorage(input.memory_tag),
       lat_lng: formatPoint(input.lat_lng),
       captured_at: input.captured_at ?? null,
       cluster_id: input.cluster_id ?? null,

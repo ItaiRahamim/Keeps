@@ -1,6 +1,5 @@
 'use client';
 
-import { useState } from 'react';
 import Image from 'next/image';
 import type { MediaRow } from '@/lib/types';
 import { getMediaUrl } from '@/lib/contracts';
@@ -52,6 +51,7 @@ export type AlbumStackProps = {
   ) => void;
   onBringToFront: (id: string) => number;
   onCaptionChange?: (id: string, caption: string) => void;
+  onOpen: (albumId: string) => void;
 };
 
 /**
@@ -69,52 +69,23 @@ export type AlbumStackProps = {
  * as small non-interactive corners peeking out at deterministic
  * offsets/rotations, plus a round badge showing the total photo count.
  *
- * Expanded (tap the badge): every photo in the album renders as its own
- * ordinary `<Polaroid>` at *its own* stored `pos_x`/`pos_y` — i.e. exactly
- * where it would already sit on the board if clustering didn't exist. This
- * was chosen over fanning items out to synthetic temporary coordinates
- * because Polaroid's drag-end handler persists `pos_x`/`pos_y` back to the
- * DB from whatever position it was initially given; feeding it a fake,
- * stack-local position would silently overwrite a photo's real board
- * position with a throwaway layout coordinate the first time someone drags
- * an expanded card. Revealing true positions has no such failure mode and
- * keeps every card's drag-to-reposition behavior identical to a plain
- * single, expanded or not. A small pill at the cover's old spot collapses
- * the album back into a stack.
+ * Activating either the cover or its count badge delegates the album id to
+ * Corkboard. The stack deliberately does not own focused-view state: that
+ * keeps the camera mounted at its exact pan/zoom transform while the
+ * controlled OpenAlbum overlay is active.
  */
-export default function AlbumStack({ album, boardScale, onTransformChange, onBringToFront, onCaptionChange }: AlbumStackProps) {
-  const [expanded, setExpanded] = useState(false);
+export default function AlbumStack({
+  album,
+  boardScale,
+  onTransformChange,
+  onBringToFront,
+  onCaptionChange,
+  onOpen,
+}: AlbumStackProps) {
   const { items } = album;
   const cover = items[0];
   const peeks = items.slice(1, 1 + MAX_PEEKS);
   const count = items.length;
-
-  if (expanded) {
-    const maxZ = items.reduce((max, item) => Math.max(max, item.z_index), cover.z_index);
-    return (
-      <>
-        {items.map((item) => (
-          <Polaroid
-            key={item.id}
-            media={item}
-            boardScale={boardScale}
-            onTransformChange={onTransformChange}
-            onBringToFront={onBringToFront}
-            onCaptionChange={onCaptionChange}
-          />
-        ))}
-        <button
-          type="button"
-          className="album-stack-collapse"
-          style={{ left: cover.pos_x, top: cover.pos_y, zIndex: maxZ + 1 }}
-          onPointerDown={(event) => event.stopPropagation()}
-          onClick={() => setExpanded(false)}
-        >
-          Collapse {count} photos
-        </button>
-      </>
-    );
-  }
 
   return (
     <>
@@ -151,10 +122,13 @@ export default function AlbumStack({ album, boardScale, onTransformChange, onBri
 
       <Polaroid
         media={cover}
+        layoutId={`album-${album.id}`}
         boardScale={boardScale}
         onTransformChange={onTransformChange}
         onBringToFront={onBringToFront}
         onCaptionChange={onCaptionChange}
+        onActivate={() => onOpen(album.id)}
+        activationLabel={`Open album with ${count} ${count === 1 ? 'memory' : 'memories'}`}
       />
 
       <button
@@ -167,9 +141,9 @@ export default function AlbumStack({ album, boardScale, onTransformChange, onBri
           zIndex: cover.z_index + 1,
         }}
         onPointerDown={(event) => event.stopPropagation()}
-        onClick={() => setExpanded(true)}
-        aria-label={`Show all ${count} photos in this album`}
-        title={`${count} photos — tap to expand`}
+        onClick={() => onOpen(album.id)}
+        aria-label={`Open album with ${count} ${count === 1 ? 'memory' : 'memories'}`}
+        title={`${count} memories — tap to open`}
       >
         {count}
       </button>

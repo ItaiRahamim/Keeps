@@ -1,18 +1,12 @@
 // Groups a flat list of MediaRow into "board items": either a lone photo/
-// video (rendered exactly as today) or a small "album" — a cluster of media
-// captured on the same calendar day *and* at a similar GPS location.
+// video (rendered exactly as today) or an "album". Explicit memory tags have
+// first priority; only untagged media falls back to EXIF day/location rules.
 //
 // This is a pure function of `MediaRow[]` (no DOM/React/Next dependency), so
 // it's trivially unit-testable and safe to call from a Client Component
 // (`Corkboard.tsx`) on every render without worrying about SSR/hydration
 // drift — same input array in, same grouping out, every time.
 //
-// NOTE on `captured_at`: this field is being added to `MediaRow` by a
-// parallel agent (see AGENTS.md's "contract" section). This file is written
-// against that contract now. Until it lands, `tsc`/`next build` will fail
-// here with a "Property 'captured_at' does not exist on type 'MediaRow'"
-// error — that is expected/transient, not a bug in this file.
-
 import type { MediaRow } from '@/lib/types';
 
 export type BoardItem =
@@ -122,6 +116,24 @@ function albumSortComparator(a: MediaRow, b: MediaRow): number {
   return 0;
 }
 
+/**
+ * Canonical comparison key for manual albums. NFKC prevents visually
+ * equivalent Unicode forms from splitting, whitespace normalization makes
+ * accidental spacing harmless, and lower-casing makes matching
+ * case-insensitive. The original, storage-normalized `memory_tag` remains on
+ * each row so UI can preserve the user's display casing.
+ */
+function memoryTagKey(tag: string | null): string | null {
+  const normalized = tag?.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
+  return normalized || null;
+}
+
+function taggedAlbumId(tagKey: string): string {
+  // encodeURIComponent is deterministic and one-to-one for the normalized
+  // string, unlike a short hash which could merge two unrelated tag names.
+  return `album-tag-${encodeURIComponent(tagKey)}`;
+}
+
 /** Minimal union-find (disjoint-set) for grouping items by pairwise proximity. */
 class UnionFind {
   private parent = new Map<string, string>();
@@ -153,9 +165,12 @@ class UnionFind {
 }
 
 /**
- * Groups media into board items per the PRD: photos/videos captured on the
- * same calendar day AND within `ALBUM_DISTANCE_THRESHOLD_M` of each other
- * become one "album"; everything else renders as a plain single card.
+ * Groups media into board items per the PRD. A non-empty manual `memory_tag`
+ * always wins: all rows with the same normalized tag become one exact album,
+ * independent of EXIF, location, or the automatic minimum size. This means
+ * a tagged singleton/pair is intentionally still an album — adding a tag is
+ * explicit user intent. Only untagged rows enter the existing automatic
+ * same-day + nearby-location algorithm below.
  *
  * Algorithm, per calendar-day bucket:
  * 1. Only items that HAVE `lat_lng` participate in clustering at all — per
@@ -179,18 +194,27 @@ class UnionFind {
  * 3. Connected components smaller than `MIN_ALBUM_SIZE` are dissolved back
  *    into plain singles rather than rendered as a stack.
  *
- * Output order: singles and albums are returned in the order their
- * underlying day-buckets/components were discovered while scanning `media`
- * in its given order, followed by all non-geotagged/no-date-key items at
- * the end. Order has no semantic meaning to the caller (Corkboard positions
- * everything absolutely via pos_x/pos_y) — only each `BoardItem`'s own
- * identity/contents matter, and those are fully deterministic.
+ * Output order: manual albums appear in tag-bucket discovery order, followed
+ * by automatic singles/albums in their underlying day/component discovery
+ * order, then non-geotagged/no-date-key items. Order has no semantic meaning
+ * to the caller (Corkboard positions everything absolutely via pos_x/pos_y)
+ * — only each `BoardItem`'s own identity/contents matter, and those are fully
+ * deterministic.
  */
 export function groupIntoAlbums(media: MediaRow[]): BoardItem[] {
+  const taggedBuckets = new Map<string, MediaRow[]>();
   const dayBuckets = new Map<string, MediaRow[]>();
   const ungrouped: MediaRow[] = [];
 
   for (const item of media) {
+    const tagKey = memoryTagKey(item.memory_tag);
+    if (tagKey) {
+      const taggedBucket = taggedBuckets.get(tagKey);
+      if (taggedBucket) taggedBucket.push(item);
+      else taggedBuckets.set(tagKey, [item]);
+      continue;
+    }
+
     const key = dayKey(item);
     if (!key || !item.lat_lng) {
       ungrouped.push(item);
@@ -202,6 +226,14 @@ export function groupIntoAlbums(media: MediaRow[]): BoardItem[] {
   }
 
   const result: BoardItem[] = [];
+
+  for (const [tagKey, bucket] of taggedBuckets) {
+    result.push({
+      kind: 'album',
+      id: taggedAlbumId(tagKey),
+      items: [...bucket].sort(albumSortComparator),
+    });
+  }
 
   for (const bucket of dayBuckets.values()) {
     if (bucket.length < MIN_ALBUM_SIZE) {
