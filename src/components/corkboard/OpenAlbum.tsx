@@ -25,9 +25,6 @@ import './open-album.css';
 
 const MAX_ITEMS_PER_PAGE = 3;
 const KEYBOARD_NUDGE = 0.035;
-const TRANSFER_EDGE_INSET = 0.06;
-
-type EdgeDirection = -1 | 1;
 
 export type OpenAlbumData = {
   id: string;
@@ -48,11 +45,12 @@ type Turn = {
   targetStart: number;
 };
 
-type TransferFeedback = {
-  pageIndex: number;
-  direction: EdgeDirection;
-  token: number;
-};
+type BookBounds = Readonly<{
+  width: number;
+  height: number;
+  visualWidth: number;
+  visualHeight: number;
+}>;
 
 type PageEntry = {
   media: MediaRow;
@@ -69,11 +67,10 @@ type DragSession = {
   pointerId: number;
   startClientX: number;
   startClientY: number;
-  originX: number;
+  originBookX: number;
   originY: number;
   scaleX: number;
   scaleY: number;
-  transferred: boolean;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -259,29 +256,25 @@ function createInitialPlacementOverrides(mediaItems: MediaRow[]): Record<string,
 type AlbumMemoryCardProps = {
   entry: PageEntry;
   pageRef: RefObject<HTMLDivElement | null>;
+  bookRef: RefObject<HTMLDivElement | null>;
+  spreadPageIndexes: readonly [number, number | null];
   decorative: boolean;
   active: boolean;
   order: number;
-  maxPageIndex: number;
   onActiveChange: (id: string | null) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
-  onTransfer: (
-    media: MediaRow,
-    placement: AlbumPlacement,
-    direction: EdgeDirection
-  ) => Promise<void>;
 };
 
 function AlbumMemoryCard({
   entry,
   pageRef,
+  bookRef,
+  spreadPageIndexes,
   decorative,
   active,
   order,
-  maxPageIndex,
   onActiveChange,
   onCommit,
-  onTransfer,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -299,6 +292,13 @@ function AlbumMemoryCard({
     const page = pageRef.current;
     const card = cardRef.current;
     if (!page || !card) return;
+    if (
+      page.clientWidth <= 0 ||
+      page.clientHeight <= 0 ||
+      card.offsetWidth <= 0 ||
+      card.offsetHeight <= 0
+    )
+      return;
     const maxX = Math.max(0, page.clientWidth - card.offsetWidth);
     const maxY = Math.max(0, page.clientHeight - card.offsetHeight);
     x.set(placement.x * maxX);
@@ -324,25 +324,36 @@ function AlbumMemoryCard({
       if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
 
       const page = pageRef.current;
+      const book = bookRef.current;
       const card = cardRef.current;
-      if (!page || !card) return;
-      const maxX = Math.max(0, page.clientWidth - card.offsetWidth);
-      const maxY = Math.max(0, page.clientHeight - card.offsetHeight);
-      const normalizedY = maxY > 0 ? clamp(y.get() / maxY, 0, 1) : 0.5;
+      if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
+
+      const pageWidth = book.clientWidth / 2;
+      const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? pageWidth : 0;
+      const bookX = clamp(sourceOffset + x.get(), 0, Math.max(0, book.clientWidth - card.offsetWidth));
+      const bookY = clamp(y.get(), 0, Math.max(0, book.clientHeight - card.offsetHeight));
+      const cardCenterX = bookX + card.offsetWidth / 2;
+      const destinationPageIndex =
+        cardCenterX >= pageWidth && spreadPageIndexes[1] !== null
+          ? spreadPageIndexes[1]
+          : spreadPageIndexes[0];
+      const destinationOffset = destinationPageIndex === spreadPageIndexes[1] ? pageWidth : 0;
+      const maxX = Math.max(0, pageWidth - card.offsetWidth);
+      const maxY = Math.max(0, book.clientHeight - card.offsetHeight);
       onActiveChange(null);
 
       try {
         await onCommit(media, {
-          pageIndex: placement.pageIndex,
-          x: maxX > 0 ? clamp(x.get() / maxX, 0, 1) : 0.5,
-          y: normalizedY,
+          pageIndex: destinationPageIndex,
+          x: maxX > 0 ? clamp((bookX - destinationOffset) / maxX, 0, 1) : 0.5,
+          y: maxY > 0 ? clamp(bookY / maxY, 0, 1) : 0.5,
         });
       } catch {
         // commitPlacement exposes the error in the album UI. Consuming it
         // here prevents a rejected pointer-event promise from going global.
       }
     },
-    [media, onActiveChange, onCommit, pageRef, placement.pageIndex, x, y]
+    [bookRef, media, onActiveChange, onCommit, pageRef, placement.pageIndex, spreadPageIndexes, x, y]
   );
 
   const nudge = useCallback(
@@ -368,7 +379,7 @@ function AlbumMemoryCard({
       aria-label={
         decorative
           ? undefined
-          : `${caption}. Drag to arrange on album page ${placement.pageIndex + 1}; drag beyond an outer edge to move pages.`
+          : `${caption}. Drag to arrange on album page ${placement.pageIndex + 1}; cross the center spine to move it between visible pages.`
       }
       style={{
         x,
@@ -385,19 +396,20 @@ function AlbumMemoryCard({
         if (decorative || (event.pointerType === 'mouse' && event.button !== 0)) return;
         event.preventDefault();
         const page = pageRef.current;
+        const book = bookRef.current;
         const card = cardRef.current;
-        if (!page || !card) return;
+        if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
-        const pageRect = page.getBoundingClientRect();
+        const bookRect = book.getBoundingClientRect();
+        const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? book.clientWidth / 2 : 0;
         dragSessionRef.current = {
           pointerId: event.pointerId,
           startClientX: event.clientX,
           startClientY: event.clientY,
-          originX: x.get(),
+          originBookX: sourceOffset + x.get(),
           originY: y.get(),
-          scaleX: page.clientWidth > 0 ? pageRect.width / page.clientWidth : 1,
-          scaleY: page.clientHeight > 0 ? pageRect.height / page.clientHeight : 1,
-          transferred: false,
+          scaleX: bookRect.width / book.clientWidth,
+          scaleY: bookRect.height / book.clientHeight,
         };
         onActiveChange(media.id);
       }}
@@ -407,54 +419,22 @@ function AlbumMemoryCard({
         event.preventDefault();
         event.stopPropagation();
         const page = pageRef.current;
+        const book = bookRef.current;
         const card = cardRef.current;
-        if (!page || !card) return;
-        const maxX = Math.max(0, page.clientWidth - card.offsetWidth);
-        const maxY = Math.max(0, page.clientHeight - card.offsetHeight);
-        const pageRect = page.getBoundingClientRect();
-        const nextX = clamp(
-          session.originX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
+        if (!page || !book || !card) return;
+        const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? book.clientWidth / 2 : 0;
+        const nextBookX = clamp(
+          session.originBookX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
           0,
-          maxX
+          Math.max(0, book.clientWidth - card.offsetWidth)
         );
         const nextY = clamp(
           session.originY + (event.clientY - session.startClientY) / Math.max(session.scaleY, 0.001),
           0,
-          maxY
+          Math.max(0, book.clientHeight - card.offsetHeight)
         );
+        x.set(nextBookX - sourceOffset);
         y.set(nextY);
-
-        const transferDirection: EdgeDirection | null =
-          event.clientX < pageRect.left && placement.pageIndex > 0
-            ? -1
-            : event.clientX > pageRect.right && placement.pageIndex < maxPageIndex
-              ? 1
-              : null;
-
-        if (transferDirection !== null && !session.transferred) {
-          // End this captured gesture before optimistic state moves the card
-          // into another page. Clearing the ref first makes the ensuing
-          // lostpointercapture event a no-op, guaranteeing one persistence
-          // request per physical boundary crossing.
-          session.transferred = true;
-          dragSessionRef.current = null;
-          onActiveChange(null);
-          if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-            event.currentTarget.releasePointerCapture(event.pointerId);
-          }
-          void onTransfer(
-            media,
-            {
-              pageIndex: placement.pageIndex + transferDirection,
-              x: transferDirection === 1 ? TRANSFER_EDGE_INSET : 1 - TRANSFER_EDGE_INSET,
-              y: maxY > 0 ? clamp(nextY / maxY, 0, 1) : 0.5,
-            },
-            transferDirection
-          ).catch(() => undefined);
-          return;
-        }
-
-        x.set(nextX);
       }}
       onPointerUp={(event) => {
         event.preventDefault();
@@ -518,24 +498,18 @@ function AlbumMemoryCard({
 
 type AlbumPageProps = {
   leaf: AlbumLeaf | undefined;
+  bookRef: RefObject<HTMLDivElement | null>;
+  spreadPageIndexes: readonly [number, number | null];
   decorative?: boolean;
-  maxPageIndex: number;
-  receivingDirection?: EdgeDirection | null;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
-  onTransfer: (
-    media: MediaRow,
-    placement: AlbumPlacement,
-    direction: EdgeDirection
-  ) => Promise<void>;
 };
 
 function AlbumPage({
   leaf,
+  bookRef,
+  spreadPageIndexes,
   decorative = false,
-  maxPageIndex,
-  receivingDirection = null,
   onCommit,
-  onTransfer,
 }: AlbumPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -547,9 +521,6 @@ function AlbumPage({
       ref={pageRef}
       className="open-album-page open-album-mini-corkboard"
       data-page-tone={pageIndex % 4}
-      data-receiving={
-        receivingDirection === null ? undefined : receivingDirection === -1 ? 'from-right' : 'from-left'
-      }
       aria-label={decorative ? undefined : `Album page ${pageIndex + 1} with ${entries.length} photos`}
     >
       {entries.length === 0 ? <span className="open-album-page-flourish" aria-hidden="true" /> : null}
@@ -558,13 +529,13 @@ function AlbumPage({
           key={entry.media.id}
           entry={entry}
           pageRef={pageRef}
+          bookRef={bookRef}
+          spreadPageIndexes={spreadPageIndexes}
           decorative={decorative}
           active={activeId === entry.media.id}
           order={order}
-          maxPageIndex={maxPageIndex}
           onActiveChange={setActiveId}
           onCommit={onCommit}
-          onTransfer={onTransfer}
         />
       ))}
       {leaf ? <span className="open-album-page-number" aria-hidden="true">{pageIndex + 1}</span> : null}
@@ -584,18 +555,18 @@ function OpenAlbumDialog({
   const descriptionId = useId();
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const bookRef = useRef<HTMLDivElement | null>(null);
+  const latestAlbumItemsRef = useRef(album.items);
   const swipeStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const saveSequenceRef = useRef(0);
   const saveQueueRef = useRef(new Map<string, Promise<SavedAlbumPlacement>>());
+  const saveVersionRef = useRef(new Map<string, number>());
+  const placementOverridesRef = useRef<Record<string, AlbumPlacement>>({});
+  const initialPlacementCreatedRef = useRef(false);
   const initialSaveStartedRef = useRef(false);
-  const transferSequenceRef = useRef(0);
-  const transferFeedbackTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const [initialPlacements] = useState<Record<string, AlbumPlacement>>(() =>
-    createInitialPlacementOverrides(album.items)
-  );
-  const [placementOverrides, setPlacementOverrides] = useState<Record<string, AlbumPlacement>>(
-    initialPlacements
-  );
+  const [bookBounds, setBookBounds] = useState<BookBounds | null>(null);
+  const [initialPlacements, setInitialPlacements] = useState<Record<string, AlbumPlacement>>({});
+  const [placementOverrides, setPlacementOverrides] = useState<Record<string, AlbumPlacement>>({});
   const [saveMessage, setSaveMessage] = useState('');
   const [saveFailed, setSaveFailed] = useState(false);
   const leaves = useMemo(
@@ -606,20 +577,38 @@ function OpenAlbumDialog({
   const safeInitialPage = clamp(Math.floor(initialPage), 0, Math.max(0, leaves.length - 1));
   const [spreadStart, setSpreadStart] = useState(Math.floor(safeInitialPage / 2) * 2);
   const [turn, setTurn] = useState<Turn | null>(null);
-  const [transferFeedback, setTransferFeedback] = useState<TransferFeedback | null>(null);
   const visibleSpreadStart = Math.min(spreadStart, lastSpreadStart);
 
   const title = memoryTagFor(album.items[0]) ?? 'Memory album';
   const canGoBack = visibleSpreadStart > 0 && !turn;
   const canGoForward = visibleSpreadStart < lastSpreadStart && !turn;
+  const bookReady = bookBounds !== null;
+
+  useLayoutEffect(() => {
+    latestAlbumItemsRef.current = album.items;
+  }, [album.items]);
+
+  useLayoutEffect(() => {
+    placementOverridesRef.current = placementOverrides;
+  }, [placementOverrides]);
 
   const commitPlacement = useCallback(async (
     media: MediaRow,
     placement: AlbumPlacement
   ): Promise<SavedAlbumPlacement> => {
+    const previousPlacement =
+      placementOverridesRef.current[media.id] ??
+      storedPlacement(media, Math.max(0, Math.ceil(album.items.length / 2) - 1)) ??
+      placement;
+    placementOverridesRef.current = {
+      ...placementOverridesRef.current,
+      [media.id]: placement,
+    };
     setPlacementOverrides((current) => ({ ...current, [media.id]: placement }));
     const sequence = saveSequenceRef.current + 1;
     saveSequenceRef.current = sequence;
+    const mediaVersion = (saveVersionRef.current.get(media.id) ?? 0) + 1;
+    saveVersionRef.current.set(media.id, mediaVersion);
     setSaveFailed(false);
     setSaveMessage('Saving album arrangement…');
 
@@ -634,10 +623,16 @@ function OpenAlbumDialog({
     try {
       const saved = await pending;
       const verified = { pageIndex: saved.pageIndex, x: saved.x, y: saved.y };
-      setPlacementOverrides((current) => ({ ...current, [media.id]: verified }));
-      // Patch the corkboard cache only after the database-returned row was
-      // verified, so close/reopen cannot mistake a failed save for data.
-      onPlacementChange?.(media.id, verified);
+      if (saveVersionRef.current.get(media.id) === mediaVersion) {
+        placementOverridesRef.current = {
+          ...placementOverridesRef.current,
+          [media.id]: verified,
+        };
+        setPlacementOverrides((current) => ({ ...current, [media.id]: verified }));
+        // Patch the corkboard cache only after the database-returned row was
+        // verified, so close/reopen cannot mistake a failed save for data.
+        onPlacementChange?.(media.id, verified);
+      }
       if (saveSequenceRef.current === sequence) {
         setSaveFailed(false);
         setSaveMessage('Album arrangement saved.');
@@ -645,6 +640,13 @@ function OpenAlbumDialog({
       return saved;
     } catch (error) {
       console.error('updateAlbumPlacement failed', error);
+      if (saveVersionRef.current.get(media.id) === mediaVersion) {
+        placementOverridesRef.current = {
+          ...placementOverridesRef.current,
+          [media.id]: previousPlacement,
+        };
+        setPlacementOverrides((current) => ({ ...current, [media.id]: previousPlacement }));
+      }
       if (saveSequenceRef.current === sequence) {
         setSaveFailed(true);
         setSaveMessage('Could not save this photo’s album position. Try again.');
@@ -655,7 +657,7 @@ function OpenAlbumDialog({
         saveQueueRef.current.delete(media.id);
       }
     }
-  }, [onPlacementChange]);
+  }, [album.items.length, onPlacementChange]);
 
   const requestTurn = useCallback((direction: -1 | 1) => {
     if (turn) return;
@@ -669,55 +671,72 @@ function OpenAlbumDialog({
     setTurn({ direction, targetStart });
   }, [lastSpreadStart, shouldReduceMotion, turn, visibleSpreadStart]);
 
-  const commitTransfer = useCallback(
-    async (media: MediaRow, placement: AlbumPlacement, direction: EdgeDirection) => {
-      const sourcePageIndex = placement.pageIndex - direction;
-      const sourceLeaf = leaves[sourcePageIndex];
-      const targetLeaf = leaves[placement.pageIndex];
-      if (!sourceLeaf || !targetLeaf) return;
+  useLayoutEffect(() => {
+    const book = bookRef.current;
+    if (!book) return;
 
-      // A full destination cannot accept a fourth card, and moving out of a
-      // two-card source would otherwise leave a sparse single-photo page.
-      // Swap the destination card nearest the shared edge in those cases so
-      // both bounded corkboards retain their intended 2–3 photo density.
-      const shouldSwap =
-        targetLeaf.entries.length >= MAX_ITEMS_PER_PAGE ||
-        (sourceLeaf.entries.length <= 2 && targetLeaf.entries.length > 0);
-      if (shouldSwap) {
-        const displaced = [...targetLeaf.entries].sort((a, b) =>
-          direction === 1
-            ? a.placement.x - b.placement.x
-            : b.placement.x - a.placement.x
-        )[0];
-        if (displaced) {
-          await commitPlacement(displaced.media, {
-            pageIndex: sourcePageIndex,
-            x: direction === 1 ? 1 - TRANSFER_EDGE_INSET : TRANSFER_EDGE_INSET,
-            y: displaced.placement.y,
-          });
-        }
-      }
+    let layoutFrame: number | null = null;
+    let paintedFrame: number | null = null;
 
-      await commitPlacement(media, placement);
+    const cancelScheduledMeasurement = () => {
+      if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
+      if (paintedFrame !== null) cancelAnimationFrame(paintedFrame);
+      layoutFrame = null;
+      paintedFrame = null;
+    };
 
-      transferSequenceRef.current += 1;
-      const feedback = {
-        pageIndex: placement.pageIndex,
-        direction,
-        token: transferSequenceRef.current,
-      };
-      setTransferFeedback(feedback);
-      if (transferFeedbackTimerRef.current) clearTimeout(transferFeedbackTimerRef.current);
-      transferFeedbackTimerRef.current = setTimeout(() => {
-        setTransferFeedback((current) => (current?.token === feedback.token ? null : current));
-        transferFeedbackTimerRef.current = null;
-      }, 850);
+    const scheduleMeasurement = () => {
+      cancelScheduledMeasurement();
+      // ResizeObserver fires before paint. Two animation frames ensure the
+      // shared-layout opening transform has painted before cards consume the
+      // book geometry, rather than scattering against a transient 0x0 box.
+      layoutFrame = requestAnimationFrame(() => {
+        layoutFrame = null;
+        paintedFrame = requestAnimationFrame(() => {
+          paintedFrame = null;
+          const rect = book.getBoundingClientRect();
+          const nextBounds = {
+            width: book.clientWidth,
+            height: book.clientHeight,
+            visualWidth: rect.width,
+            visualHeight: rect.height,
+          };
+          if (
+            nextBounds.width <= 0 ||
+            nextBounds.height <= 0 ||
+            nextBounds.visualWidth <= 0 ||
+            nextBounds.visualHeight <= 0
+          )
+            return;
 
-      const targetSpreadStart = Math.floor(placement.pageIndex / 2) * 2;
-      if (targetSpreadStart !== visibleSpreadStart) requestTurn(direction);
-    },
-    [commitPlacement, leaves, requestTurn, visibleSpreadStart]
-  );
+          if (!initialPlacementCreatedRef.current) {
+            initialPlacementCreatedRef.current = true;
+            const placements = createInitialPlacementOverrides(latestAlbumItemsRef.current);
+            setInitialPlacements(placements);
+            placementOverridesRef.current = { ...placements, ...placementOverridesRef.current };
+            setPlacementOverrides(placementOverridesRef.current);
+          }
+          setBookBounds((current) =>
+            current?.width === nextBounds.width &&
+            current.height === nextBounds.height &&
+            current.visualWidth === nextBounds.visualWidth &&
+            current.visualHeight === nextBounds.visualHeight
+              ? current
+              : nextBounds
+          );
+        });
+      });
+    };
+
+    const observer = new ResizeObserver(scheduleMeasurement);
+    observer.observe(book);
+    scheduleMeasurement();
+
+    return () => {
+      observer.disconnect();
+      cancelScheduledMeasurement();
+    };
+  }, [album.id]);
 
   useEffect(() => {
     if (initialSaveStartedRef.current || Object.keys(initialPlacements).length === 0) return;
@@ -745,7 +764,6 @@ function OpenAlbumDialog({
 
     return () => {
       document.body.style.overflow = previousOverflow;
-      if (transferFeedbackTimerRef.current) clearTimeout(transferFeedbackTimerRef.current);
       previouslyFocused?.focus();
     };
   }, []);
@@ -806,6 +824,10 @@ function OpenAlbumDialog({
   const baseRightIndex = turn?.direction === 1 ? turn.targetStart + 1 : visibleSpreadStart + 1;
   const sheetFrontIndex = turn?.direction === -1 ? turn.targetStart + 1 : visibleSpreadStart + 1;
   const sheetBackIndex = turn?.direction === -1 ? visibleSpreadStart : (turn?.targetStart ?? visibleSpreadStart);
+  const spreadPageIndexes = [
+    visibleSpreadStart,
+    visibleSpreadStart + 1 < leaves.length ? visibleSpreadStart + 1 : null,
+  ] as const;
 
   return (
     <motion.section
@@ -859,6 +881,7 @@ function OpenAlbumDialog({
         </button>
 
         <motion.div
+          ref={bookRef}
           className="open-album-book"
           layoutId={layoutId}
           onPointerDown={(event) => {
@@ -898,26 +921,20 @@ function OpenAlbumDialog({
           </div>
           <div className="open-album-static-page open-album-static-page-left">
             <AlbumPage
-              leaf={leaves[baseLeftIndex]}
+              leaf={bookReady ? leaves[baseLeftIndex] : undefined}
+              bookRef={bookRef}
+              spreadPageIndexes={spreadPageIndexes}
               decorative={Boolean(turn)}
-              maxPageIndex={leaves.length - 1}
-              receivingDirection={
-                transferFeedback?.pageIndex === baseLeftIndex ? transferFeedback.direction : null
-              }
               onCommit={commitPlacement}
-              onTransfer={commitTransfer}
             />
           </div>
           <div className="open-album-static-page open-album-static-page-right">
             <AlbumPage
-              leaf={leaves[baseRightIndex]}
+              leaf={bookReady ? leaves[baseRightIndex] : undefined}
+              bookRef={bookRef}
+              spreadPageIndexes={spreadPageIndexes}
               decorative={Boolean(turn)}
-              maxPageIndex={leaves.length - 1}
-              receivingDirection={
-                transferFeedback?.pageIndex === baseRightIndex ? transferFeedback.direction : null
-              }
               onCommit={commitPlacement}
-              onTransfer={commitTransfer}
             />
           </div>
 
@@ -936,20 +953,20 @@ function OpenAlbumDialog({
             >
               <div className="open-album-sheet-face open-album-sheet-front">
                 <AlbumPage
-                  leaf={leaves[sheetFrontIndex]}
+                  leaf={bookReady ? leaves[sheetFrontIndex] : undefined}
+                  bookRef={bookRef}
+                  spreadPageIndexes={spreadPageIndexes}
                   decorative
-                  maxPageIndex={leaves.length - 1}
                   onCommit={commitPlacement}
-                  onTransfer={commitTransfer}
                 />
               </div>
               <div className="open-album-sheet-face open-album-sheet-back">
                 <AlbumPage
-                  leaf={leaves[sheetBackIndex]}
+                  leaf={bookReady ? leaves[sheetBackIndex] : undefined}
+                  bookRef={bookRef}
+                  spreadPageIndexes={spreadPageIndexes}
                   decorative
-                  maxPageIndex={leaves.length - 1}
                   onCommit={commitPlacement}
-                  onTransfer={commitTransfer}
                 />
               </div>
             </motion.div>
