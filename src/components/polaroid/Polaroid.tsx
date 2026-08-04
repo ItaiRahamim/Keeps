@@ -15,17 +15,9 @@ import {
 } from '../lib/deterministic';
 import { CARD_WIGGLE_FRACTION, DRAG_TILT_DEG, PIN_WIGGLE_KEYFRAMES, WIGGLE_TRANSITION } from '../lib/motion';
 import { positionFromPointerDelta, type DragPoint } from './drag-position';
+import { getPolaroidGeometry, POLAROID_CARD_WIDTH_PX } from './sizing';
 import './polaroid.css';
 
-const CARD_WIDTH = 210;
-const MIN_ASPECT = 0.68;
-const MAX_ASPECT = 1.45;
-// `.polaroid-body`'s asymmetric padding (design-system.md §3) is
-// `12px 12px 56px 12px` and box-sizing: border-box, so `.polaroid-media`'s
-// actual content width is CARD_WIDTH minus the 12px left + 12px right
-// padding. Used below to compute an explicit pixel height as a fallback for
-// `aspect-ratio` (see MEDIA_MIN_HEIGHT_PX comment).
-const MEDIA_CONTENT_WIDTH = CARD_WIDTH - 24;
 const SPRING_TRANSITION = { type: 'spring' as const, stiffness: 300, damping: 28 };
 const TAP_SLOP_PX = 5;
 
@@ -39,10 +31,6 @@ type DragSession = {
 };
 
 export type BoardScaleSource = number | (() => number);
-
-function clamp(n: number, min: number, max: number) {
-  return Math.min(max, Math.max(min, n));
-}
 
 function readBoardScale(source: BoardScaleSource): number {
   const scale = typeof source === 'function' ? source() : source;
@@ -132,10 +120,10 @@ export default function Polaroid({
   const pinPosition = useMemo(() => pinPositionForId(media.id), [media.id]);
   const transformOrigin = PIN_POSITION_TRANSFORM_ORIGIN[pinPosition];
 
-  const aspect = useMemo(() => {
-    if (!media.width || !media.height) return 1;
-    return clamp(media.width / media.height, MIN_ASPECT, MAX_ASPECT);
-  }, [media.width, media.height]);
+  const geometry = useMemo(
+    () => getPolaroidGeometry(media.width, media.height),
+    [media.width, media.height]
+  );
 
   // `.polaroid-media` gets its height from CSS `aspect-ratio` (set via the
   // inline style below) with no other in-flow content to size it from.
@@ -147,8 +135,6 @@ export default function Polaroid({
   // here — plain `height` in px needs no feature detection and works
   // identically on every browser back to CSS1, so it removes this failure
   // mode entirely rather than just narrowing the affected browser range.
-  const mediaHeight = useMemo(() => MEDIA_CONTENT_WIDTH / aspect, [aspect]);
-
   const playWiggle = isHovered && !shouldReduceMotion;
   const rotateTarget = shouldReduceMotion
     ? baseRotation
@@ -203,7 +189,7 @@ export default function Polaroid({
       style={{
         left: 0,
         top: 0,
-        width: CARD_WIDTH,
+        width: POLAROID_CARD_WIDTH_PX,
         zIndex: media.z_index,
         x,
         y,
@@ -292,7 +278,7 @@ export default function Polaroid({
       <div className="polaroid-body">
         <div
           className="polaroid-media"
-          style={{ aspectRatio: `${aspect}`, height: mediaHeight }}
+          style={{ aspectRatio: `${geometry.mediaAspect}`, height: geometry.mediaHeight }}
           onClick={() => {
             if (onActivate) return;
             if (media.media_type === 'video' && !videoActive) setVideoActive(true);

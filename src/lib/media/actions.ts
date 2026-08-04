@@ -11,7 +11,7 @@ import type { MediaRow, ClusterRow } from '@/lib/types';
 type MediaRecord = Omit<MediaRow, 'lat_lng'> & { lat_lng: unknown };
 
 const MEDIA_COLUMNS =
-  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, album_page_index, album_pos_x, album_pos_y, rotation, z_index, duration_ms, width, height, created_at';
+  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized, rotation, z_index, duration_ms, width, height, created_at';
 
 const CLUSTER_COLUMNS = 'id, name, cover_media_id, created_at';
 
@@ -166,6 +166,8 @@ export type AlbumPlacement = {
   y: number;
 };
 
+export type SavedAlbumPlacement = AlbumPlacement & { id: string };
+
 /**
  * Persists a photo's proportional position inside a focused album without
  * touching `pos_x` / `pos_y`, which exclusively belong to the global board.
@@ -173,7 +175,10 @@ export type AlbumPlacement = {
  * ownership-filtered here, and the existing media UPDATE RLS policy enforces
  * the same ownership boundary again in Postgres.
  */
-export async function updateAlbumPlacement(id: string, placement: AlbumPlacement): Promise<void> {
+export async function updateAlbumPlacement(
+  id: string,
+  placement: AlbumPlacement
+): Promise<SavedAlbumPlacement> {
   if (!Number.isInteger(placement.pageIndex) || placement.pageIndex < 0 || placement.pageIndex > 9999) {
     throw new Error('Invalid album page index');
   }
@@ -196,15 +201,49 @@ export async function updateAlbumPlacement(id: string, placement: AlbumPlacement
       album_page_index: placement.pageIndex,
       album_pos_x: placement.x,
       album_pos_y: placement.y,
+      album_page_number: placement.pageIndex,
+      album_page_x: placement.x,
+      album_page_y: placement.y,
+      album_placement_initialized: true,
     })
     .eq('id', id)
     .eq('user_id', userId)
-    .select('id')
-    .maybeSingle();
+    .select('id, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized')
+    .single();
 
   if (error) throw error;
   if (!data) throw new Error('Album placement could not be saved for this photo');
+
+  const verified = data as {
+    id: string;
+    album_page_index: number | null;
+    album_pos_x: number | null;
+    album_pos_y: number | null;
+    album_page_number: number | null;
+    album_page_x: number | null;
+    album_page_y: number | null;
+    album_placement_initialized: boolean;
+  };
+  if (
+    verified.id !== id ||
+    verified.album_placement_initialized !== true ||
+    verified.album_page_index !== placement.pageIndex ||
+    verified.album_pos_x !== placement.x ||
+    verified.album_pos_y !== placement.y ||
+    verified.album_page_number !== placement.pageIndex ||
+    verified.album_page_x !== placement.x ||
+    verified.album_page_y !== placement.y
+  ) {
+    throw new Error('Supabase returned an album placement that did not match the requested coordinates');
+  }
+
   revalidatePath('/');
+  return {
+    id: verified.id,
+    pageIndex: verified.album_page_index,
+    x: verified.album_pos_x,
+    y: verified.album_pos_y,
+  };
 }
 
 export async function updateCaption(id: string, caption: string): Promise<void> {

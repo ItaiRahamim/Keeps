@@ -4,16 +4,9 @@ import Image from 'next/image';
 import type { MediaRow } from '@/lib/types';
 import { getMediaUrl } from '@/lib/contracts';
 import Polaroid, { type BoardScaleSource } from '../polaroid/Polaroid';
+import { POLAROID_CARD_WIDTH_PX } from '../polaroid/sizing';
 import { hashString, pinColorForId, rotationForId } from '../lib/deterministic';
 import './album-stack.css';
-
-// Mirrors Polaroid.tsx's own (unexported) CARD_WIDTH. Duplicated rather than
-// imported so this file doesn't need to add an export to Polaroid.tsx — that
-// file's diffs are owned by a parallel agent doing iOS-specific fixes this
-// pass, and a single shared layout constant is low-risk to keep in sync by
-// hand (Polaroid.tsx is the source of truth; update this if that ever
-// changes).
-const CARD_WIDTH = 210;
 
 // How many of the album's actual photos peek out from behind the cover
 // card. AGENTS.md suggests "top 2-3" — 2 reads clearly as "a stack" without
@@ -103,7 +96,7 @@ export default function AlbumStack({
             style={{
               left: cover.pos_x + dx,
               top: cover.pos_y + dy,
-              width: CARD_WIDTH,
+              width: POLAROID_CARD_WIDTH_PX,
               zIndex: cover.z_index,
               transform: `rotate(${rotationForId(photo.id)}deg)`,
             }}
@@ -136,7 +129,7 @@ export default function AlbumStack({
         className="album-stack-badge"
         data-pin-color={pinColorForId(album.id)}
         style={{
-          left: cover.pos_x + CARD_WIDTH - 16,
+          left: cover.pos_x + POLAROID_CARD_WIDTH_PX - 16,
           top: cover.pos_y - 12,
           zIndex: cover.z_index + 1,
         }}

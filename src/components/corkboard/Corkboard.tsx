@@ -399,6 +399,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
               album_page_index: placement.pageIndex,
               album_pos_x: placement.x,
               album_pos_y: placement.y,
+              album_page_number: placement.pageIndex,
+              album_page_x: placement.x,
+              album_page_y: placement.y,
+              album_placement_initialized: true,
             }
           : item
       )

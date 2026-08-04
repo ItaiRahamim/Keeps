@@ -142,43 +142,171 @@
   aspect-ratio: 1.64 / 1;
   max-height: min(66dvh, 570px);
   margin: auto;
-  filter: drop-shadow(0 28px 30px rgba(0, 0, 0, 0.38));
   transform-style: preserve-3d;
   touch-action: none;
 }
 
+.open-album-book-shadow {
+  position: absolute;
+  inset: 3% -3.5% -5%;
+  z-index: -5;
+  border-radius: 8% 8% 11% 11%;
+  pointer-events: none;
+  background: rgba(18, 11, 7, 0.68);
+  filter: blur(22px);
+  transform: translateY(18px) rotateX(67deg);
+  transform-origin: bottom center;
+}
+
 .open-album-cover-edge {
   position: absolute;
-  inset: -10px -12px -14px;
-  z-index: -2;
-  border: 2px solid rgba(75, 47, 31, 0.72);
-  border-radius: 10px 14px 14px 10px;
+  inset: -14px -17px -18px;
+  z-index: -4;
+  overflow: hidden;
+  border: 2px solid rgba(42, 57, 50, 0.95);
+  border-radius: 13px 17px 18px 13px;
   background:
-    linear-gradient(90deg, rgba(67, 40, 25, 0.55), transparent 4%, transparent 96%, rgba(67, 40, 25, 0.45)),
-    color-mix(in srgb, var(--color-pin-teal) 60%, #2c443d);
+    linear-gradient(90deg, rgba(18, 27, 23, 0.65), transparent 7%, transparent 93%, rgba(18, 27, 23, 0.55)),
+    linear-gradient(165deg, color-mix(in srgb, var(--color-pin-teal) 68%, #50655c), #263d35 72%);
   box-shadow:
-    inset 0 0 0 3px rgba(255, 255, 255, 0.12),
-    0 12px 0 rgba(55, 35, 21, 0.56);
+    inset 0 0 0 3px rgba(255, 255, 255, 0.1),
+    inset 0 0 0 7px rgba(20, 34, 28, 0.3),
+    0 10px 0 #1d3029,
+    0 16px 20px rgba(22, 13, 8, 0.48);
 }
+
+.open-album-cover-grain {
+  position: absolute;
+  inset: 0;
+  opacity: 0.19;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='130' height='130'%3E%3Cfilter id='l'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.38' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23l)' opacity='.7'/%3E%3C/svg%3E");
+  mix-blend-mode: soft-light;
+}
+
+.open-album-cover-corner {
+  position: absolute;
+  width: 46px;
+  height: 46px;
+  border-color: rgba(224, 193, 126, 0.46);
+  pointer-events: none;
+}
+
+.open-album-cover-corner-top-left {
+  top: 7px;
+  left: 7px;
+  border-top: 1px solid;
+  border-left: 1px solid;
+  border-radius: 7px 0 0;
+}
+
+.open-album-cover-corner-top-right {
+  top: 7px;
+  right: 7px;
+  border-top: 1px solid;
+  border-right: 1px solid;
+  border-radius: 0 7px 0 0;
+}
+
+.open-album-cover-corner-bottom-left {
+  bottom: 7px;
+  left: 7px;
+  border-bottom: 1px solid;
+  border-left: 1px solid;
+  border-radius: 0 0 0 7px;
+}
+
+.open-album-cover-corner-bottom-right {
+  right: 7px;
+  bottom: 7px;
+  border-right: 1px solid;
+  border-bottom: 1px solid;
+  border-radius: 0 0 7px;
+}
+
+.open-album-page-depth {
+  position: absolute;
+  z-index: 0;
+  top: 3px;
+  bottom: -10px;
+  width: calc(50% - 7px);
+  border: 1px solid rgba(117, 94, 65, 0.35);
+  background: repeating-linear-gradient(0deg, #e8dec9 0, #e8dec9 1px, #c8baa1 1.5px, #f5eddf 2.5px);
+  box-shadow: 0 5px 8px rgba(37, 24, 15, 0.32);
+}
+
+.open-album-page-depth-left {
+  left: 5px;
+  border-radius: 8px 1px 1px 10px;
+  transform: rotate(0.3deg);
+}
+
+.open-album-page-depth-right {
+  right: 5px;
+  border-radius: 1px 8px 10px 1px;
+  transform: rotate(-0.3deg);
+}
+
+.open-album-spine {
+  position: absolute;
+  z-index: 0;
+  top: -13px;
+  bottom: -17px;
+  left: 50%;
+  width: 42px;
+  border: 1px solid rgba(20, 30, 26, 0.8);
+  transform: translateX(-50%);
+  pointer-events: none;
+  background: linear-gradient(90deg, #1c3029, #4b6b5e 32%, #263f36 52%, #5d786c 69%, #172921);
+  box-shadow:
+    inset 8px 0 10px rgba(0, 0, 0, 0.34),
+    inset -8px 0 10px rgba(0, 0, 0, 0.34),
+    0 8px 0 #182a23;
+}
+
+.open-album-spine span {
+  position: absolute;
+  left: 2px;
+  right: 2px;
+  height: 8px;
+  border-top: 1px solid rgba(221, 198, 145, 0.3);
+  border-bottom: 1px solid rgba(16, 25, 21, 0.72);
+  box-shadow: 0 2px 3px rgba(0, 0, 0, 0.22);
+}
+
+.open-album-spine span:nth-child(1) { top: 15%; }
+.open-album-spine span:nth-child(2) { top: 49%; }
+.open-album-spine span:nth-child(3) { top: 82%; }
 
 .open-album-binding {
   position: absolute;
-  z-index: 6;
-  top: -3px;
-  bottom: -8px;
+  z-index: 7;
+  top: -1px;
+  bottom: -5px;
   left: 50%;
-  width: 18px;
+  width: 24px;
   transform: translateX(-50%);
   pointer-events: none;
   background:
     linear-gradient(
       90deg,
-      rgba(46, 29, 18, 0.28),
-      rgba(255, 255, 255, 0.42) 42%,
-      rgba(46, 29, 18, 0.35) 58%,
+      rgba(46, 29, 18, 0.48),
+      rgba(255, 255, 255, 0.38) 43%,
+      rgba(46, 29, 18, 0.48) 58%,
       transparent
     );
   filter: blur(0.4px);
+}
+
+.open-album-binding-thread {
+  position: absolute;
+  top: 2%;
+  bottom: 2%;
+  left: 50%;
+  width: 5px;
+  transform: translateX(-50%);
+  opacity: 0.72;
+  background: repeating-linear-gradient(180deg, rgba(98, 63, 36, 0.8) 0 10px, rgba(238, 215, 169, 0.78) 10px 14px, rgba(98, 63, 36, 0.8) 14px 24px);
+  box-shadow: 0 0 3px rgba(46, 29, 18, 0.55);
 }
 
 .open-album-static-page,
@@ -190,20 +318,36 @@
 }
 
 .open-album-static-page {
-  overflow: hidden;
-  background: var(--color-polaroid);
+  z-index: 1;
+  /* Interactive photos may hang over a resting physical leaf. Turning-sheet
+     faces remain clipped below so the 3D page mask is still correct. */
+  overflow: visible;
+  border: 1px solid rgba(132, 107, 74, 0.34);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.035'/%3E%3C/svg%3E"),
+    #f4ead8;
+}
+
+/* A dragged photo is allowed to hang across the gutter. Lift its complete
+   leaf so the neighboring resting page cannot paint over that overhang. */
+.open-album-static-page:has(.open-album-memory-card[data-active='true']) {
+  z-index: 4;
 }
 
 .open-album-static-page-left {
   left: 0;
   border-radius: 7px 1px 1px 7px;
-  box-shadow: inset -16px 0 22px -18px rgba(48, 33, 22, 0.75);
+  box-shadow:
+    inset -24px 0 28px -22px rgba(48, 33, 22, 0.8),
+    inset 5px 0 8px rgba(255, 255, 255, 0.24);
 }
 
 .open-album-static-page-right {
   right: 0;
   border-radius: 1px 7px 7px 1px;
-  box-shadow: inset 16px 0 22px -18px rgba(48, 33, 22, 0.75);
+  box-shadow:
+    inset 24px 0 28px -22px rgba(48, 33, 22, 0.8),
+    inset -5px 0 8px rgba(255, 255, 255, 0.24);
 }
 
 .open-album-turning-sheet {
@@ -219,7 +363,10 @@
   overflow: hidden;
   backface-visibility: hidden;
   -webkit-backface-visibility: hidden;
-  background: var(--color-polaroid);
+  border: 1px solid rgba(132, 107, 74, 0.3);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='100'%3E%3Cfilter id='p'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23p)' opacity='.035'/%3E%3C/svg%3E"),
+    #f4ead8;
 }
 
 .open-album-sheet-front {
@@ -240,7 +387,7 @@
 .open-album-page {
   --album-page-cork: var(--color-cork);
   position: relative;
-  overflow: hidden;
+  overflow: visible;
   width: 100%;
   height: 100%;
   box-sizing: border-box;
@@ -305,14 +452,18 @@
   position: absolute;
   top: 0;
   left: 0;
-  /* Width and preferred aspect are supplied per photo from its natural
-     dimensions. This hard cap is the scatter model's maximum footprint. */
-  max-width: 38%;
-  max-height: 44%;
+  /* Exact Corkboard geometry: never shrink the physical 210px frame to fit
+     a leaf. The leaf itself is the clipping boundary, like a real page. */
+  width: 210px;
+  min-width: 210px;
+  max-width: none;
+  max-height: none;
   box-sizing: border-box;
-  padding: clamp(4px, 0.65vw, 8px) clamp(4px, 0.65vw, 8px) clamp(24px, 4.3vw, 48px);
+  padding: 12px 12px 56px;
   overflow: visible;
-  background: var(--color-polaroid);
+  background:
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='110' height='110'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.86' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)' opacity='.035'/%3E%3C/svg%3E"),
+    var(--color-polaroid);
   box-shadow: var(--shadow-polaroid);
   cursor: grab;
   touch-action: none;
@@ -328,58 +479,6 @@
   box-shadow: var(--shadow-polaroid-lifted);
 }
 
-.open-album-memory-card[data-edge-intent] {
-  outline: 3px dashed color-mix(in srgb, var(--color-pin-mustard) 72%, white);
-  outline-offset: 4px;
-}
-
-.open-album-memory-card[data-edge-intent]::after {
-  position: absolute;
-  z-index: 5;
-  top: 50%;
-  display: grid;
-  place-items: center;
-  width: 1.75rem;
-  height: 1.75rem;
-  border: 2px solid var(--color-polaroid);
-  border-radius: 999px;
-  content: '→';
-  transform: translateY(-50%);
-  color: var(--color-polaroid);
-  background: var(--color-pin-mustard);
-  box-shadow: var(--shadow-pin);
-  font: 700 1rem/1 var(--font-ui);
-  opacity: 0.72;
-  transition: opacity 120ms ease, transform 120ms ease, background-color 120ms ease;
-}
-
-.open-album-memory-card[data-edge-intent='left']::after {
-  left: -1.1rem;
-  transform: translateY(-50%) rotate(180deg);
-}
-
-.open-album-memory-card[data-edge-intent='right']::after {
-  right: -1.1rem;
-}
-
-.open-album-memory-card[data-edge-armed='true'] {
-  outline-style: solid;
-  outline-color: color-mix(in srgb, var(--color-pin-teal) 82%, white);
-}
-
-.open-album-memory-card[data-edge-armed='true']::after {
-  background: var(--color-pin-teal);
-  opacity: 1;
-}
-
-.open-album-memory-card[data-edge-armed='true'][data-edge-intent='left']::after {
-  transform: translateY(-50%) rotate(180deg) scale(1.14);
-}
-
-.open-album-memory-card[data-edge-armed='true'][data-edge-intent='right']::after {
-  transform: translateY(-50%) scale(1.14);
-}
-
 .open-album-memory-card[data-decorative='true'] {
   pointer-events: none;
 }
@@ -391,10 +490,10 @@
 
 .open-album-memory-photo {
   position: absolute;
-  top: clamp(4px, 0.65vw, 8px);
-  right: clamp(4px, 0.65vw, 8px);
-  bottom: clamp(24px, 4.3vw, 48px);
-  left: clamp(4px, 0.65vw, 8px);
+  top: 12px;
+  right: 12px;
+  bottom: 56px;
+  left: 12px;
   overflow: hidden;
   background: #d9d2c6;
 }
@@ -438,14 +537,18 @@
 
 .open-album-caption {
   position: absolute;
-  right: 5px;
-  bottom: 3px;
-  left: 5px;
+  right: 12px;
+  bottom: 8px;
+  left: 12px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   overflow: hidden;
   margin: 0;
   font-family: var(--font-caption);
-  font-size: clamp(0.7rem, 1.55vw, 1.05rem);
-  line-height: 1.2;
+  font-size: 1.35rem;
+  line-height: 1.1;
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -509,6 +612,11 @@
   font-variant-numeric: tabular-nums;
 }
 
+.open-album-save-status[data-error] {
+  color: #ffd2c8;
+  font-weight: 700;
+}
+
 .open-album-gesture-hint {
   font-family: var(--font-caption);
   font-size: 1.15rem;
@@ -560,9 +668,13 @@
   }
 
   .open-album-book {
-    width: 100%;
+    /* Preserve true 210px cards instead of squeezing them into a half-leaf.
+       The centered book can extend beneath the viewport crop on a phone. */
+    left: 50%;
+    width: max(100%, 500px);
     aspect-ratio: 1.3 / 1;
     max-height: min(58dvh, 430px);
+    translate: -50% 0;
   }
 
   .open-album-control {
@@ -602,10 +714,6 @@
     animation: none;
     opacity: 0.72;
   }
-
-  .open-album-memory-card[data-edge-intent]::after {
-    transition: none;
-  }
 }
 
 @media (max-height: 540px) and (orientation: landscape) {
@@ -627,7 +735,7 @@
 
   .open-album-book {
     max-height: 69dvh;
-    width: min(78vw, 720px);
+    width: max(500px, min(78vw, 720px));
   }
 }
 

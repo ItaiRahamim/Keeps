@@ -20,6 +20,10 @@ export type MediaRow = {
   album_page_index: number | null;
   album_pos_x: number | null;
   album_pos_y: number | null;
+  album_page_number: number | null;
+  album_page_x: number | null;
+  album_page_y: number | null;
+  album_placement_initialized: boolean;
   rotation: number;
   z_index: number;
   duration_ms: number | null;
