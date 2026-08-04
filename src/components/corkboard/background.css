@@ -30,9 +30,19 @@
   cursor: grabbing;
 }
 
+.corkboard-viewport[data-view-mode='library'] {
+  cursor: default;
+  touch-action: pan-y;
+}
+
 /* The focused album is modal. Remove the upload control from both pointer
    and accessibility hit testing until the closing animation has finished. */
 .corkboard-viewport[data-album-open='true'] .upload-fab {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.corkboard-viewport[data-album-open='true'] .view-mode-toggle {
   visibility: hidden;
   pointer-events: none;
 }

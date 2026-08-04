@@ -11,7 +11,7 @@ import type { MediaRow, ClusterRow } from '@/lib/types';
 type MediaRecord = Omit<MediaRow, 'lat_lng'> & { lat_lng: unknown };
 
 const MEDIA_COLUMNS =
-  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, rotation, z_index, duration_ms, width, height, created_at';
+  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, album_page_index, album_pos_x, album_pos_y, rotation, z_index, duration_ms, width, height, created_at';
 
 const CLUSTER_COLUMNS = 'id, name, cover_media_id, created_at';
 
@@ -157,6 +157,53 @@ export async function updateMediaTransform(
   const { error } = await supabase.from('media').update(patch).eq('id', id);
   if (error) throw error;
 
+  revalidatePath('/');
+}
+
+export type AlbumPlacement = {
+  pageIndex: number;
+  x: number;
+  y: number;
+};
+
+/**
+ * Persists a photo's proportional position inside a focused album without
+ * touching `pos_x` / `pos_y`, which exclusively belong to the global board.
+ * Authentication comes from the server-side cookie session, the update is
+ * ownership-filtered here, and the existing media UPDATE RLS policy enforces
+ * the same ownership boundary again in Postgres.
+ */
+export async function updateAlbumPlacement(id: string, placement: AlbumPlacement): Promise<void> {
+  if (!Number.isInteger(placement.pageIndex) || placement.pageIndex < 0 || placement.pageIndex > 9999) {
+    throw new Error('Invalid album page index');
+  }
+  if (
+    !Number.isFinite(placement.x) ||
+    !Number.isFinite(placement.y) ||
+    placement.x < 0 ||
+    placement.x > 1 ||
+    placement.y < 0 ||
+    placement.y > 1
+  ) {
+    throw new Error('Invalid album page position');
+  }
+
+  const supabase = await createClient();
+  const userId = await requireUserId(supabase);
+  const { data, error } = await supabase
+    .from('media')
+    .update({
+      album_page_index: placement.pageIndex,
+      album_pos_x: placement.x,
+      album_pos_y: placement.y,
+    })
+    .eq('id', id)
+    .eq('user_id', userId)
+    .select('id')
+    .maybeSingle();
+
+  if (error) throw error;
+  if (!data) throw new Error('Album placement could not be saved for this photo');
   revalidatePath('/');
 }
 

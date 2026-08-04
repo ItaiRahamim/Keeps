@@ -123,9 +123,59 @@ function albumSortComparator(a: MediaRow, b: MediaRow): number {
  * case-insensitive. The original, storage-normalized `memory_tag` remains on
  * each row so UI can preserve the user's display casing.
  */
-function memoryTagKey(tag: string | null): string | null {
+export function normalizeMemoryTag(tag: string | null): string | null {
   const normalized = tag?.normalize('NFKC').trim().replace(/\s+/g, ' ').toLowerCase();
   return normalized || null;
+}
+
+export type BoardPosition = { x: number; y: number };
+
+/**
+ * Picks the persisted starting position for a newly uploaded tagged memory.
+ * Existing photos are deliberately never moved: a tag only influences this
+ * one initial placement, after which the board remains entirely user-driven.
+ *
+ * The center is the centroid of the matching tag's current saved positions.
+ * A deterministic golden-angle orbit gives each newcomer a visibly separate
+ * spot around that center instead of stacking every tagged item at one exact
+ * coordinate. The radius is bounded, so an album still reads as one loose
+ * spatial cluster rather than spreading across the full board.
+ */
+export function getTaggedDropPosition(
+  media: MediaRow[],
+  memoryTag: string | null,
+  fallback: BoardPosition,
+  surfaceSize = 4000
+): BoardPosition {
+  const tagKey = normalizeMemoryTag(memoryTag);
+  if (!tagKey) return fallback;
+
+  const siblings = media.filter((item) => normalizeMemoryTag(item.memory_tag) === tagKey);
+  if (siblings.length === 0) return fallback;
+
+  const center = siblings.reduce(
+    (sum, item) => ({ x: sum.x + item.pos_x, y: sum.y + item.pos_y }),
+    { x: 0, y: 0 }
+  );
+  center.x /= siblings.length;
+  center.y /= siblings.length;
+
+  // Six cards per loose ring, with a small ring expansion for larger tagged
+  // albums. The hard cap keeps every tagged set visually cohesive.
+  const ring = Math.floor(siblings.length / 6);
+  const radius = Math.min(420, 190 + ring * 72);
+  const seed = [...tagKey].reduce((hash, char) => ((hash * 31 + char.charCodeAt(0)) >>> 0), 2166136261);
+  const angle = (seed % 360) * (Math.PI / 180) + siblings.length * 2.399963229728653;
+
+  // Approximate card extents keep the whole Polaroid reachable at board
+  // edges without introducing drop-time snapping anywhere else.
+  const min = 28;
+  const maxX = Math.max(min, surfaceSize - 250);
+  const maxY = Math.max(min, surfaceSize - 330);
+  return {
+    x: Math.min(maxX, Math.max(min, center.x + Math.cos(angle) * radius)),
+    y: Math.min(maxY, Math.max(min, center.y + Math.sin(angle) * radius * 0.78)),
+  };
 }
 
 function taggedAlbumId(tagKey: string): string {
@@ -207,7 +257,7 @@ export function groupIntoAlbums(media: MediaRow[]): BoardItem[] {
   const ungrouped: MediaRow[] = [];
 
   for (const item of media) {
-    const tagKey = memoryTagKey(item.memory_tag);
+    const tagKey = normalizeMemoryTag(item.memory_tag);
     if (tagKey) {
       const taggedBucket = taggedBuckets.get(tagKey);
       if (taggedBucket) taggedBucket.push(item);

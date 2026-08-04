@@ -17,6 +17,9 @@ export type MediaRow = {
   cluster_id: string | null;
   pos_x: number;
   pos_y: number;
+  album_page_index: number | null;
+  album_pos_x: number | null;
+  album_pos_y: number | null;
   rotation: number;
   z_index: number;
   duration_ms: number | null;

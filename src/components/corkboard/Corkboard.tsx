@@ -3,11 +3,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { ClusterRow, MediaRow } from '@/lib/types';
-import { groupIntoAlbums, type BoardItem } from '@/lib/media/clustering';
+import type { AlbumPlacement } from '@/lib/media/actions';
+import { getTaggedDropPosition, groupIntoAlbums } from '@/lib/media/clustering';
 import Polaroid from '../polaroid/Polaroid';
-import AlbumStack from './AlbumStack';
 import OpenAlbum from './OpenAlbum';
 import UploadSheet from '../upload/UploadSheet';
+import LibraryView, { ViewModeToggle, type LibraryAlbum, type ViewMode } from './LibraryView';
 import './background.css';
 
 const MIN_SCALE = 0.4;
@@ -82,27 +83,31 @@ export type CorkboardProps = {
  * together; page.tsx just hands it the initial server-fetched rows.
  */
 export default function Corkboard({ media, clusters }: CorkboardProps) {
-  // Not yet surfaced in this pass — reserved for a future cluster/album
-  // view. Destructured here (not dropped) so the prop stays part of the
-  // component's public contract against `getClusters()`.
+  // Library grouping is derived from live media so freshly uploaded rows
+  // appear immediately. Keep the server cluster prop in the public contract
+  // for the existing page query and future persisted cluster metadata.
   void clusters;
 
   const [items, setItems] = useState<MediaRow[]>(media);
+  const [viewMode, setViewMode] = useState<ViewMode>('board');
   const zCounterRef = useRef(items.reduce((max, item) => Math.max(max, item.z_index), 0));
-  // Recomputed only when the client-owned item list changes. Because the
-  // focused album below is selected from this live value, `onCreated`
-  // updates both the board stack and an already-open tagged album at once.
-  const boardItems = useMemo(() => groupIntoAlbums(items), [items]);
+  // Grouping belongs exclusively to Library mode. The corkboard always maps
+  // the raw `items` array so every photo remains individually visible and a
+  // user's persisted global position is never replaced by an album cover.
+  const libraryAlbums = useMemo<LibraryAlbum[]>(
+    () =>
+      groupIntoAlbums(items).map((item) =>
+        item.kind === 'album'
+          ? item
+          : { id: `album-loose-${item.media.id}`, items: [item.media] }
+      ),
+    [items]
+  );
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
   const activeAlbum = useMemo(() => {
     if (!activeAlbumId) return null;
-    return (
-      boardItems.find(
-        (item): item is Extract<BoardItem, { kind: 'album' }> =>
-          item.kind === 'album' && item.id === activeAlbumId
-      ) ?? null
-    );
-  }, [activeAlbumId, boardItems]);
+    return libraryAlbums.find((album) => album.id === activeAlbumId) ?? null;
+  }, [activeAlbumId, libraryAlbums]);
   const isAlbumOpen = activeAlbum !== null;
   const [isAlbumClosing, setIsAlbumClosing] = useState(false);
   const isAlbumModalActive = isAlbumOpen || isAlbumClosing;
@@ -116,6 +121,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   const cameraX = useMotionValue(0);
   const cameraY = useMotionValue(0);
   const cameraScale = useMotionValue(1);
+  const getBoardScale = useCallback(() => cameraScale.get(), [cameraScale]);
   const [isPanning, setIsPanning] = useState(false);
   const cameraBeforeAlbumRef = useRef<Camera | null>(null);
   const albumOpenRef = useRef(false);
@@ -189,6 +195,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         return;
       }
 
+      // Library mode is an ordinary vertical document. Let its scroll area
+      // consume wheel/trackpad input without touching the hidden camera.
+      if (viewMode === 'library') return;
+
       const target = e.target;
       if (target instanceof Element && target.closest('.upload-fab, .upload-sheet-backdrop')) return;
 
@@ -216,7 +226,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       el.removeEventListener('wheel', onWheel);
       if (zoomIdleTimeoutRef.current) clearTimeout(zoomIdleTimeoutRef.current);
     };
-  }, [applyCamera, isAlbumModalActive]);
+  }, [applyCamera, isAlbumModalActive, viewMode]);
 
   const startPan = useCallback((pointerId: number, point: PointerPosition) => {
     cameraGestureRef.current = {
@@ -252,7 +262,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   // the object and the camera.
   const handlePointerDown = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isAlbumModalActive) return;
+      if (isAlbumModalActive || viewMode !== 'board') return;
       if (e.target !== e.currentTarget && e.target !== surfaceRef.current) return;
       if (e.pointerType === 'mouse' && e.button !== 0) return;
       e.preventDefault();
@@ -273,12 +283,12 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       if (pointerIds.length === 2) startPinch([pointerIds[0], pointerIds[1]]);
       setIsPanning(true);
     },
-    [isAlbumModalActive, startPan, startPinch]
+    [isAlbumModalActive, startPan, startPinch, viewMode]
   );
 
   const handlePointerMove = useCallback(
     (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isAlbumModalActive) return;
+      if (isAlbumModalActive || viewMode !== 'board') return;
       if (!activePointersRef.current.has(e.pointerId)) return;
       e.preventDefault();
       const { left, top } = viewportSizeRef.current;
@@ -314,7 +324,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         scale: nextScale,
       });
     },
-    [applyCamera, isAlbumModalActive]
+    [applyCamera, isAlbumModalActive, viewMode]
   );
 
   const handlePointerEnd = useCallback(
@@ -359,9 +369,40 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     return zCounterRef.current;
   }, []);
 
+  const handleViewModeChange = useCallback((nextMode: ViewMode) => {
+    if (nextMode === viewMode) return;
+
+    // A mode switch must never leave a pointer captured by the camera. The
+    // camera MotionValues themselves stay untouched, so returning to the
+    // board resumes at the exact same pan/zoom coordinates.
+    const viewport = viewportRef.current;
+    for (const pointerId of activePointersRef.current.keys()) {
+      if (viewport?.hasPointerCapture(pointerId)) viewport.releasePointerCapture(pointerId);
+    }
+    activePointersRef.current.clear();
+    cameraGestureRef.current = null;
+    setIsPanning(false);
+    setViewMode(nextMode);
+  }, [viewMode]);
+
   const handleCreated = useCallback((row: MediaRow) => {
     setItems((prev) => [...prev, row]);
     zCounterRef.current = Math.max(zCounterRef.current, row.z_index);
+  }, []);
+
+  const handleAlbumPlacementChange = useCallback((mediaId: string, placement: AlbumPlacement) => {
+    setItems((current) =>
+      current.map((item) =>
+        item.id === mediaId
+          ? {
+              ...item,
+              album_page_index: placement.pageIndex,
+              album_pos_x: placement.x,
+              album_pos_y: placement.y,
+            }
+          : item
+      )
+    );
   }, []);
 
   // Reasonable initial drop spot for a newly uploaded item: roughly the
@@ -372,7 +413,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   // SSR-rendered output), so plain `Math.random()` here is fine — it's not
   // subject to the determinism requirement in design-system.md §5, which is
   // specifically about a card's *tilt*.
-  const getDropPosition = useCallback(() => {
+  const getDropPosition = useCallback((memoryTag: string | null) => {
     const rect = viewportRef.current?.getBoundingClientRect();
     const vw = rect?.width ?? 800;
     const vh = rect?.height ?? 600;
@@ -380,8 +421,9 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     const centerX = (vw / 2 - camera.x) / camera.scale;
     const centerY = (vh / 2 - camera.y) / camera.scale;
     const jitter = () => (Math.random() - 0.5) * 160;
-    return { x: centerX + jitter(), y: centerY + jitter() };
-  }, []);
+    const visibleFallback = { x: centerX + jitter(), y: centerY + jitter() };
+    return getTaggedDropPosition(items, memoryTag, visibleFallback, SURFACE_SIZE);
+  }, [items]);
 
   const handleOpenAlbum = useCallback((albumId: string) => {
     // Defensive gesture cleanup means a cover tap can never leave a captured
@@ -419,45 +461,47 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       className="corkboard-viewport cork-texture"
       data-panning={isPanning}
       data-album-open={isAlbumModalActive}
+      data-view-mode={viewMode}
       onPointerDown={handlePointerDown}
       onPointerMove={handlePointerMove}
       onPointerUp={handlePointerEnd}
       onPointerCancel={handlePointerEnd}
       onLostPointerCapture={handlePointerEnd}
     >
-      <motion.div
-        ref={surfaceRef}
-        className="corkboard-surface"
-        data-transforming={isPanning || isZooming}
-        aria-hidden={isAlbumModalActive}
-        inert={isAlbumModalActive ? true : undefined}
-        style={{ x: cameraX, y: cameraY, scale: cameraScale, width: SURFACE_SIZE, height: SURFACE_SIZE }}
-      >
-        {boardItems.map((boardItem) =>
-          boardItem.kind === 'single' ? (
-            <Polaroid
-              key={boardItem.media.id}
-              media={boardItem.media}
-              boardScale={cameraScale.get()}
-              onTransformChange={handleTransformChange}
-              onBringToFront={handleBringToFront}
-              onCaptionChange={handleCaptionChange}
-            />
-          ) : (
-            <AlbumStack
-              key={boardItem.id}
-              album={boardItem}
-              boardScale={cameraScale.get()}
-              onTransformChange={handleTransformChange}
-              onBringToFront={handleBringToFront}
-              onCaptionChange={handleCaptionChange}
-              onOpen={handleOpenAlbum}
-            />
-          )
-        )}
-      </motion.div>
+      <ViewModeToggle value={viewMode} onChange={handleViewModeChange} disabled={isAlbumModalActive} />
 
-      {items.length === 0 ? (
+      <AnimatePresence mode="wait" initial={false}>
+        {viewMode === 'board' ? (
+          <motion.div
+            key="board"
+            ref={surfaceRef}
+            className="corkboard-surface"
+            data-transforming={isPanning || isZooming}
+            aria-hidden={isAlbumModalActive}
+            inert={isAlbumModalActive ? true : undefined}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.18 }}
+            style={{ x: cameraX, y: cameraY, scale: cameraScale, width: SURFACE_SIZE, height: SURFACE_SIZE }}
+          >
+            {items.map((mediaItem) => (
+              <Polaroid
+                key={mediaItem.id}
+                media={mediaItem}
+                boardScale={getBoardScale}
+                onTransformChange={handleTransformChange}
+                onBringToFront={handleBringToFront}
+                onCaptionChange={handleCaptionChange}
+              />
+            ))}
+          </motion.div>
+        ) : (
+          <LibraryView albums={libraryAlbums} onOpen={handleOpenAlbum} inactive={isAlbumModalActive} />
+        )}
+      </AnimatePresence>
+
+      {viewMode === 'board' && items.length === 0 ? (
         <div className="corkboard-empty-state">
           <div className="corkboard-empty-state-card">
             <p className="corkboard-empty-state-title">The board is empty</p>
@@ -480,6 +524,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
             key={activeAlbum.id}
             album={activeAlbum}
             onClose={handleCloseAlbum}
+            onPlacementChange={handleAlbumPlacementChange}
             layoutId={`album-${activeAlbum.id}`}
           />
         ) : null}

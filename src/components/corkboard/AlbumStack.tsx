@@ -3,7 +3,7 @@
 import Image from 'next/image';
 import type { MediaRow } from '@/lib/types';
 import { getMediaUrl } from '@/lib/contracts';
-import Polaroid from '../polaroid/Polaroid';
+import Polaroid, { type BoardScaleSource } from '../polaroid/Polaroid';
 import { hashString, pinColorForId, rotationForId } from '../lib/deterministic';
 import './album-stack.css';
 
@@ -44,7 +44,7 @@ function peekOffset(id: string, depth: number): { dx: number; dy: number } {
 
 export type AlbumStackProps = {
   album: { id: string; items: MediaRow[] };
-  boardScale: number;
+  boardScale: BoardScaleSource;
   onTransformChange: (
     id: string,
     patch: Partial<Pick<MediaRow, 'pos_x' | 'pos_y' | 'rotation' | 'z_index'>>

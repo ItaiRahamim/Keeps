@@ -19,7 +19,7 @@ export type UploadSheetProps = {
   onCreated: (row: MediaRow) => void;
   /** Asks the caller (Corkboard) for a reasonable pos_x/pos_y for a new
    *  card, in board-surface coordinates. */
-  getDropPosition: () => { x: number; y: number };
+  getDropPosition: (memoryTag: string | null) => { x: number; y: number };
 };
 
 /**
@@ -60,7 +60,8 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
       setError(null);
       try {
         const uploaded = await uploadProcessedMedia(processed, setProgress);
-        const drop = getDropPosition();
+        const normalizedMemoryTag = memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null;
+        const drop = getDropPosition(normalizedMemoryTag);
 
         // `createMedia`'s input requires `rotation` up front, but the
         // deterministic per-card tilt (design-system.md §5) is a pure
@@ -77,7 +78,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
           thumbnail_url: uploaded.thumbnailUrl,
           thumbnail_data: processed.thumbnail.lqip,
           caption: caption.trim() || null,
-          memory_tag: memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null,
+          memory_tag: normalizedMemoryTag,
           lat_lng: processed.lat_lng,
           captured_at: processed.captured_at,
           duration_ms: processed.duration_ms,

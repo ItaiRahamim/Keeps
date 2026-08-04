@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useRef, useState } from 'react';
+import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import Image from 'next/image';
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import type { MediaRow } from '@/lib/types';
@@ -14,6 +14,7 @@ import {
   rotationForId,
 } from '../lib/deterministic';
 import { CARD_WIGGLE_FRACTION, DRAG_TILT_DEG, PIN_WIGGLE_KEYFRAMES, WIGGLE_TRANSITION } from '../lib/motion';
+import { positionFromPointerDelta, type DragPoint } from './drag-position';
 import './polaroid.css';
 
 const CARD_WIDTH = 210;
@@ -26,9 +27,26 @@ const MAX_ASPECT = 1.45;
 // `aspect-ratio` (see MEDIA_MIN_HEIGHT_PX comment).
 const MEDIA_CONTENT_WIDTH = CARD_WIDTH - 24;
 const SPRING_TRANSITION = { type: 'spring' as const, stiffness: 300, damping: 28 };
+const TAP_SLOP_PX = 5;
+
+type DragSession = {
+  pointerId: number;
+  pointerStart: DragPoint;
+  origin: DragPoint;
+  scale: number;
+  zIndex: number;
+  moved: boolean;
+};
+
+export type BoardScaleSource = number | (() => number);
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
+}
+
+function readBoardScale(source: BoardScaleSource): number {
+  const scale = typeof source === 'function' ? source() : source;
+  return Number.isFinite(scale) && scale > 0 ? scale : 1;
 }
 
 // ASSUMPTION (integration note — flagging for the cross-agent pass):
@@ -49,10 +67,13 @@ function resolveMediaUrl(value: string): string {
 
 export type PolaroidProps = {
   media: MediaRow;
-  /** Current corkboard zoom level — needed to convert Framer Motion's
-   *  screen-space drag offset back into the board's own (scaled) coordinate
-   *  space before persisting pos_x/pos_y. */
-  boardScale: number;
+  /**
+   * Live corkboard zoom source used to convert viewport-pixel pointer deltas
+   * into board coordinates. Corkboard passes a getter because its camera is
+   * a MotionValue and can change without a React render. A number remains
+   * accepted for unscaled/static consumers such as isolated previews.
+   */
+  boardScale: BoardScaleSource;
   onTransformChange: (
     id: string,
     patch: Partial<Pick<MediaRow, 'pos_x' | 'pos_y' | 'rotation' | 'z_index'>>
@@ -84,9 +105,21 @@ export default function Polaroid({
   const [isEditingCaption, setIsEditingCaption] = useState(false);
   const [captionDraft, setCaptionDraft] = useState(media.caption ?? '');
 
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
-  const dragOriginRef = useRef({ pos_x: media.pos_x, pos_y: media.pos_y, z_index: media.z_index });
+  // These MotionValues hold the *absolute* board position, rather than a
+  // temporary offset layered on top of left/top. That removes the old
+  // release-time race where the offset was reset before React committed the
+  // matching left/top state, which made a card visibly jump or fly away.
+  const x = useMotionValue(media.pos_x);
+  const y = useMotionValue(media.pos_y);
+  const dragSessionRef = useRef<DragSession | null>(null);
+
+  // Keep server/realtime/optimistic updates reflected when this card is not
+  // under the pointer. During a drag, the pointer session is authoritative.
+  useLayoutEffect(() => {
+    if (dragSessionRef.current) return;
+    x.set(media.pos_x);
+    y.set(media.pos_y);
+  }, [media.pos_x, media.pos_y, x, y]);
 
   // design-system.md §5 — a pure function of `id`, identical on server and
   // client. Deliberately NOT read from `media.rotation`: that DB column is
@@ -136,6 +169,28 @@ export default function Polaroid({
     });
   }
 
+  function finishDrag(pointerId: number, card: HTMLDivElement, activateIfTap = false) {
+    const session = dragSessionRef.current;
+    if (!session || session.pointerId !== pointerId) return;
+
+    dragSessionRef.current = null;
+    setIsDragging(false);
+    if (card.hasPointerCapture(pointerId)) card.releasePointerCapture(pointerId);
+
+    // x/y already contain the exact board-space values painted on screen.
+    // Persist them without resetting or rebasing any transform, so pointer-up
+    // cannot introduce a one-frame snap and no inertia can continue afterward.
+    const pos_x = x.get();
+    const pos_y = y.get();
+    const patch = { pos_x, pos_y, z_index: session.zIndex };
+    onTransformChange(media.id, patch);
+    updateMediaTransform(media.id, patch).catch((err) => {
+      console.error('updateMediaTransform failed', err);
+    });
+
+    if (activateIfTap && !session.moved) onActivate?.();
+  }
+
   return (
     <motion.div
       layoutId={layoutId}
@@ -146,8 +201,8 @@ export default function Polaroid({
       tabIndex={onActivate ? 0 : undefined}
       aria-label={onActivate ? activationLabel : undefined}
       style={{
-        left: media.pos_x,
-        top: media.pos_y,
+        left: 0,
+        top: 0,
         width: CARD_WIDTH,
         zIndex: media.z_index,
         x,
@@ -156,45 +211,81 @@ export default function Polaroid({
       }}
       animate={{ rotate: rotateTarget }}
       transition={playWiggle ? WIGGLE_TRANSITION : SPRING_TRANSITION}
-      drag
-      dragMomentum
-      dragElastic={0.06}
-      dragTransition={{ power: 0.2, timeConstant: 240, restDelta: 0.5 }}
-      // A card owns its one-finger drag. Do not let the pointerdown reach
-      // Corkboard's delegated background handler and start a camera pan too.
-      onPointerDown={(e) => e.stopPropagation()}
-      onTap={onActivate}
+      // A card owns its pointer for the entire gesture. Native pointer
+      // capture plus `touch-action: none` gives us exact, synchronous deltas
+      // on iOS without allowing the delegated board handler to pan as well.
+      onPointerDown={(event) => {
+        event.stopPropagation();
+        if (event.pointerType === 'mouse' && event.button !== 0) return;
+        if (dragSessionRef.current) return;
+        if (event.target instanceof Element && event.target.closest('input, textarea, button')) return;
+
+        const zIndex = onBringToFront(media.id);
+        const pointerStart = { x: event.clientX, y: event.clientY };
+        dragSessionRef.current = {
+          pointerId: event.pointerId,
+          pointerStart,
+          origin: { x: x.get(), y: y.get() },
+          // Sample the live camera once at pointer-down. This avoids stale
+          // render-time numbers while keeping one coordinate system for the
+          // complete gesture.
+          scale: readBoardScale(boardScale),
+          zIndex,
+          moved: false,
+        };
+        event.currentTarget.setPointerCapture(event.pointerId);
+        setIsDragging(true);
+        onTransformChange(media.id, { z_index: zIndex });
+      }}
+      onPointerMove={(event) => {
+        const session = dragSessionRef.current;
+        if (!session || session.pointerId !== event.pointerId) return;
+        event.stopPropagation();
+        event.preventDefault();
+
+        const pointerCurrent = { x: event.clientX, y: event.clientY };
+        if (
+          !session.moved &&
+          Math.hypot(
+            pointerCurrent.x - session.pointerStart.x,
+            pointerCurrent.y - session.pointerStart.y
+          ) >= TAP_SLOP_PX
+        ) {
+          session.moved = true;
+        }
+        const next = positionFromPointerDelta(
+          session.origin,
+          session.pointerStart,
+          pointerCurrent,
+          session.scale
+        );
+        x.set(next.x);
+        y.set(next.y);
+      }}
+      onPointerUp={(event) => {
+        event.stopPropagation();
+        finishDrag(event.pointerId, event.currentTarget, true);
+      }}
+      onPointerCancel={(event) => {
+        event.stopPropagation();
+        finishDrag(event.pointerId, event.currentTarget);
+      }}
+      onLostPointerCapture={(event) => {
+        event.stopPropagation();
+        finishDrag(event.pointerId, event.currentTarget);
+      }}
       onKeyDown={(event) => {
-        // Framer maps Enter to onTap for keyboard users. A div with
-        // role="button" does not receive native Space activation, so add
-        // that one missing button behavior without double-firing Enter.
-        if (!onActivate || event.target !== event.currentTarget || event.key !== ' ') return;
+        if (
+          !onActivate ||
+          event.target !== event.currentTarget ||
+          (event.key !== 'Enter' && event.key !== ' ')
+        )
+          return;
         event.preventDefault();
         onActivate();
       }}
       onHoverStart={() => setIsHovered(true)}
       onHoverEnd={() => setIsHovered(false)}
-      onDragStart={() => {
-        setIsDragging(true);
-        const z = onBringToFront(media.id);
-        dragOriginRef.current = { pos_x: media.pos_x, pos_y: media.pos_y, z_index: z };
-        onTransformChange(media.id, { z_index: z });
-      }}
-      onDragEnd={() => {
-        setIsDragging(false);
-        const origin = dragOriginRef.current;
-        // Framer's x/y motion values track raw screen-pixel offset; divide
-        // by the board's current zoom to get the equivalent offset in the
-        // (scaled) board coordinate space pos_x/pos_y live in.
-        const pos_x = origin.pos_x + x.get() / boardScale;
-        const pos_y = origin.pos_y + y.get() / boardScale;
-        x.set(0);
-        y.set(0);
-        onTransformChange(media.id, { pos_x, pos_y, z_index: origin.z_index });
-        updateMediaTransform(media.id, { pos_x, pos_y, z_index: origin.z_index }).catch((err) => {
-          console.error('updateMediaTransform failed', err);
-        });
-      }}
     >
       <Pushpin color={pinColor} position={pinPosition} hovered={playWiggle} />
 

@@ -1,0 +1,322 @@
+.view-mode-toggle {
+  position: absolute;
+  z-index: 950;
+  top: calc(0.75rem + env(safe-area-inset-top, 0px));
+  left: 50%;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  width: min(21rem, calc(100vw - 2rem));
+  padding: 0.3rem;
+  transform: translateX(-50%);
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--color-polaroid) 93%, var(--color-pin-cream));
+  box-shadow: 1px 5px 15px rgba(58, 47, 34, 0.24);
+  font-family: var(--font-ui);
+  isolation: isolate;
+}
+
+.view-mode-toggle-slider {
+  position: absolute;
+  z-index: -1;
+  top: 0.3rem;
+  bottom: 0.3rem;
+  left: 0.3rem;
+  width: calc(50% - 0.3rem);
+  border-radius: 999px;
+  background: var(--color-pin-teal);
+  box-shadow: 0 2px 8px rgba(46, 125, 107, 0.28);
+  transition: transform 220ms cubic-bezier(0.22, 1, 0.36, 1), background-color 180ms ease;
+}
+
+.view-mode-toggle-slider[data-mode='library'] {
+  transform: translateX(100%);
+  background: var(--color-pin-mustard);
+}
+
+.view-mode-toggle-button {
+  display: inline-flex;
+  min-height: 2.55rem;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  padding: 0.45rem 0.75rem;
+  border: 0;
+  border-radius: 999px;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 70%, transparent);
+  background: transparent;
+  font: 600 0.78rem/1 var(--font-ui);
+  cursor: pointer;
+  transition: color 180ms ease;
+}
+
+.view-mode-toggle-button[aria-pressed='true'] {
+  color: white;
+}
+
+.view-mode-toggle-button:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-pin-red) 50%, transparent);
+  outline-offset: 3px;
+}
+
+.view-mode-toggle-button:disabled {
+  cursor: default;
+}
+
+.view-mode-toggle-button svg {
+  width: 1rem;
+  height: 1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.library-view {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: calc(5.25rem + env(safe-area-inset-top, 0px)) clamp(1rem, 4vw, 3.5rem)
+    calc(6.5rem + env(safe-area-inset-bottom, 0px));
+  background:
+    radial-gradient(circle at 18% 4%, rgba(217, 165, 33, 0.15), transparent 28rem),
+    linear-gradient(145deg, #f8f1e5 0%, #efe4d3 48%, #f7efe4 100%);
+  color: var(--color-polaroid-shadow-tint);
+  cursor: default;
+  user-select: text;
+  -webkit-user-select: text;
+  touch-action: pan-y;
+  overscroll-behavior-y: contain;
+}
+
+.library-view::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.035;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180' viewBox='0 0 180 180'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.7'/%3E%3C/svg%3E");
+}
+
+.library-view-header {
+  position: relative;
+  max-width: 46rem;
+  margin: 0 auto clamp(2rem, 5vw, 3.75rem);
+  text-align: center;
+}
+
+.library-view-kicker {
+  margin: 0 0 0.25rem;
+  color: var(--color-pin-teal);
+  font: 700 0.72rem/1.3 var(--font-ui);
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.library-view-header h1 {
+  margin: 0;
+  font: 400 clamp(2.4rem, 7vw, 4.6rem)/1.05 var(--font-caption);
+}
+
+.library-view-header > p:last-child {
+  margin: 0.35rem auto 0;
+  max-width: 34rem;
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 70%, transparent);
+  font: 0.9rem/1.5 var(--font-ui);
+}
+
+.library-shelves {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 15rem), 1fr));
+  gap: 2.8rem clamp(1.25rem, 4vw, 3.25rem);
+  max-width: 76rem;
+  margin: 0 auto;
+}
+
+.library-shelves::after {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  right: -1rem;
+  bottom: -1.05rem;
+  left: -1rem;
+  height: 1rem;
+  border-radius: 0.15rem;
+  background: linear-gradient(#9c7554, #745039);
+  box-shadow: 0 9px 12px rgba(58, 47, 34, 0.25);
+}
+
+.library-album {
+  position: relative;
+  display: flex;
+  width: 100%;
+  min-height: 18rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 1.25rem 1rem 0.9rem;
+  border: 0;
+  border-radius: 0.55rem 0.55rem 0.15rem 0.15rem;
+  background: color-mix(in srgb, var(--color-pin-teal) 14%, var(--color-polaroid));
+  color: inherit;
+  box-shadow: 2px 10px 22px rgba(58, 47, 34, 0.2);
+  cursor: pointer;
+  transform-origin: 50% 100%;
+}
+
+.library-album:nth-child(3n + 2) {
+  background: color-mix(in srgb, var(--color-pin-mustard) 16%, var(--color-polaroid));
+}
+
+.library-album:nth-child(3n) {
+  background: color-mix(in srgb, var(--color-pin-red) 9%, var(--color-polaroid));
+}
+
+.library-album:focus-visible {
+  outline: 4px solid color-mix(in srgb, var(--color-pin-teal) 55%, transparent);
+  outline-offset: 5px;
+}
+
+.library-album-preview {
+  position: relative;
+  width: 10rem;
+  height: 11.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.library-album-photo {
+  position: absolute;
+  inset: 0.3rem 0.4rem auto;
+  height: 10.5rem;
+  padding: 0.45rem 0.45rem 1.7rem;
+  border-radius: 0.12rem;
+  background: var(--color-polaroid);
+  box-shadow: 1px 6px 12px rgba(58, 47, 34, 0.3);
+  transform: translate(var(--preview-offset-x), var(--preview-offset-y))
+    rotate(calc(var(--preview-rotation) + var(--preview-fan)));
+  transform-origin: 50% 95%;
+}
+
+.library-album-image {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 7.7rem;
+  overflow: hidden;
+  background: color-mix(in srgb, var(--color-cork) 50%, white);
+}
+
+.library-album-image img {
+  object-fit: cover;
+}
+
+.library-album-pin {
+  position: absolute;
+  z-index: 4;
+  top: -0.25rem;
+  left: 50%;
+  width: 0.85rem;
+  height: 0.85rem;
+  transform: translateX(-50%);
+  border: 1px solid rgba(255, 255, 255, 0.65);
+  border-radius: 50%;
+  background: var(--color-pin-red);
+  box-shadow: var(--shadow-pin);
+}
+
+.library-album-pin[data-color='mustard'] { background: var(--color-pin-mustard); }
+.library-album-pin[data-color='teal'] { background: var(--color-pin-teal); }
+.library-album-pin[data-color='cream'] { background: var(--color-pin-cream); }
+.library-album-pin[data-color='slate'] { background: var(--color-pin-slate); }
+
+.library-album-label {
+  display: flex;
+  width: 100%;
+  flex-direction: column;
+  gap: 0.12rem;
+  text-align: left;
+}
+
+.library-album-label strong {
+  overflow: hidden;
+  font: 400 1.55rem/1.2 var(--font-caption);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.library-album-label > span {
+  color: color-mix(in srgb, var(--color-polaroid-shadow-tint) 62%, transparent);
+  font: 0.72rem/1.3 var(--font-ui);
+  letter-spacing: 0.03em;
+}
+
+.library-empty {
+  position: relative;
+  max-width: 28rem;
+  margin: 4rem auto;
+  padding: 2.2rem;
+  border: 1px dashed color-mix(in srgb, var(--color-pin-teal) 45%, transparent);
+  border-radius: 1rem;
+  background: rgba(253, 251, 247, 0.7);
+  text-align: center;
+  box-shadow: 2px 8px 18px rgba(58, 47, 34, 0.12);
+}
+
+.library-empty p {
+  margin: 0;
+  font: 400 1.7rem/1.25 var(--font-caption);
+}
+
+.library-empty span {
+  font: 0.8rem/1.4 var(--font-ui);
+  opacity: 0.7;
+}
+
+@media (max-width: 480px) {
+  .view-mode-toggle {
+    top: calc(0.55rem + env(safe-area-inset-top, 0px));
+  }
+
+  .library-view {
+    padding-right: 1.1rem;
+    padding-left: 1.1rem;
+  }
+
+  .library-shelves {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 2rem 0.8rem;
+  }
+
+  .library-album {
+    min-height: 14rem;
+    padding-inline: 0.6rem;
+  }
+
+  .library-album-preview {
+    width: 7.2rem;
+    height: 8.7rem;
+  }
+
+  .library-album-photo {
+    height: 8.2rem;
+    padding: 0.35rem 0.35rem 1.35rem;
+  }
+
+  .library-album-image {
+    height: 5.95rem;
+  }
+
+  .library-album-label strong {
+    font-size: 1.25rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .view-mode-toggle-slider {
+    transition: none;
+  }
+}
