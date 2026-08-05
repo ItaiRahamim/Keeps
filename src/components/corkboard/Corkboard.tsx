@@ -109,8 +109,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     return libraryAlbums.find((album) => album.id === activeAlbumId) ?? null;
   }, [activeAlbumId, libraryAlbums]);
   const isAlbumOpen = activeAlbum !== null;
-  const [isAlbumClosing, setIsAlbumClosing] = useState(false);
-  const isAlbumModalActive = isAlbumOpen || isAlbumClosing;
+  const isAlbumModalActive = isAlbumOpen;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -437,14 +436,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     setIsPanning(false);
     cameraBeforeAlbumRef.current = { ...cameraRef.current };
     albumOpenRef.current = true;
-    setIsAlbumClosing(false);
     setActiveAlbumId(albumId);
   }, []);
 
   const handleCloseAlbum = useCallback(() => {
     const savedCamera = cameraBeforeAlbumRef.current;
     setActiveAlbumId(null);
-    setIsAlbumClosing(true);
+    albumOpenRef.current = false;
     cameraBeforeAlbumRef.current = null;
 
     // The surface remains mounted, and its MotionValues are normally already
@@ -516,23 +514,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
 
       <UploadSheet onCreated={handleCreated} getDropPosition={getDropPosition} />
 
-      <AnimatePresence
-        mode="wait"
-        onExitComplete={() => {
-          albumOpenRef.current = false;
-          setIsAlbumClosing(false);
-        }}
-      >
-        {activeAlbum ? (
-          <OpenAlbum
-            key={activeAlbum.id}
-            album={activeAlbum}
-            onClose={handleCloseAlbum}
-            onPlacementChange={handleAlbumPlacementChange}
-            layoutId={`album-${activeAlbum.id}`}
-          />
-        ) : null}
-      </AnimatePresence>
+      {activeAlbum ? (
+        <OpenAlbum
+          album={activeAlbum}
+          onClose={handleCloseAlbum}
+          onPlacementChange={handleAlbumPlacementChange}
+        />
+      ) : null}
     </div>
   );
 }

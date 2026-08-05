@@ -36,8 +36,6 @@ export type OpenAlbumProps = {
   onClose: () => void;
   onPlacementChange?: (mediaId: string, placement: AlbumPlacement) => void;
   initialPage?: number;
-  /** Optional Framer shared-layout identity supplied by the corkboard. */
-  layoutId?: string;
 };
 
 type Turn = {
@@ -347,8 +345,6 @@ function AlbumMemoryCard({
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
   const { media, mediaIndex, placement } = entry;
   const caption = captionFor(media, mediaIndex);
   const source = media.thumbnail_url ?? (media.media_type === 'image' ? media.original_url : null);
@@ -356,6 +352,10 @@ function AlbumMemoryCard({
     () => getPolaroidGeometry(media.width, media.height),
     [media.width, media.height]
   );
+  // CSS owns the page geometry. These safe first-paint values prevent a
+  // measurement callback from being required before photos are visible.
+  const x = useMotionValue(placement.x * Math.max(0, 400 - frame.cardWidth));
+  const y = useMotionValue(placement.y * Math.max(0, 520 - frame.cardHeight));
 
   const syncFromPlacement = useCallback(() => {
     const page = pageRef.current;
@@ -623,7 +623,6 @@ function OpenAlbumDialog({
   onClose,
   onPlacementChange,
   initialPage = 0,
-  layoutId,
 }: OpenAlbumProps) {
   const shouldReduceMotion = useReducedMotion();
   const titleId = useId();
@@ -865,17 +864,13 @@ function OpenAlbumDialog({
   ] as const;
 
   return (
-    <motion.section
+    <section
       ref={dialogRef}
       className="open-album-overlay"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
       aria-describedby={descriptionId}
-      initial={shouldReduceMotion ? false : { opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={shouldReduceMotion ? { opacity: 0 } : { opacity: 0, transition: { duration: 0.18 } }}
-      transition={{ duration: shouldReduceMotion ? 0 : 0.24, ease: 'easeOut' }}
       onPointerDown={(event) => event.stopPropagation()}
       onClick={(event) => {
         if (event.target === event.currentTarget) onClose();
@@ -915,10 +910,9 @@ function OpenAlbumDialog({
           <span>Previous</span>
         </button>
 
-        <motion.div
+        <div
           ref={bookRef}
           className="open-album-book"
-          layoutId={layoutId}
           onPointerDown={(event) => {
             if (event.pointerType === 'mouse') return;
             swipeStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
@@ -1006,7 +1000,7 @@ function OpenAlbumDialog({
               </div>
             </motion.div>
           ) : null}
-        </motion.div>
+        </div>
 
         <button
           type="button"
@@ -1034,7 +1028,7 @@ function OpenAlbumDialog({
       <p className="open-album-gesture-hint" aria-hidden="true">
         Drag to arrange · cross an outer edge to move pages · swipe to flip
       </p>
-    </motion.section>
+    </section>
   );
 }
 
