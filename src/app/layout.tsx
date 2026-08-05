@@ -1,5 +1,5 @@
 import type { Metadata, Viewport } from "next";
-import { Geist, Geist_Mono, Solitreo } from "next/font/google";
+import { Caveat, Geist, Geist_Mono, Playpen_Sans_Hebrew } from "next/font/google";
 import "./globals.css";
 
 // UI chrome font (buttons, nav, forms) — NOT the handwritten caption font.
@@ -15,33 +15,23 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Handwritten caption font for Polaroid captions (design-system.md §1/§6).
-//
-// RESOLVED Hebrew-support gap: an earlier pass here used `Caveat`, which
-// has zero Hebrew glyph coverage in next/font's Google Fonts data (verified
-// against node_modules/next/dist/compiled/@next/font/dist/google/font-data.json
-// — Caveat ships only cyrillic/cyrillic-ext/latin/latin-ext), and the
-// documented fallback (`Kalam`) turned out to have *no* Hebrew subset
-// either, so Hebrew captions were silently rendering in the browser's
-// generic serif/cursive fallback, not a handwriting face — a real gap for
-// a Hebrew-speaking family.
-//
-// Replaced with `Solitreo`: a genuine historical *cursive Hebrew* script
-// (`subsets: ["hebrew", "latin", "latin-ext"]`, weight 400 only) that also
-// renders its Latin glyphs in a flowing script style — visually verified
-// side-by-side against Caveat, Playpen Sans Hebrew, and Rubik Scribble at
-// the actual `.polaroid-chin` size (1.35rem): Solitreo was the only
-// Hebrew-capable candidate that reads as genuinely handwritten/cursive in
-// *both* scripts (Playpen Sans Hebrew is a bold rounded print/marker style
-// in both scripts — legible but not cursive; Rubik Scribble renders as a
-// faint sketchy outline, too low-contrast to read comfortably at this
-// size). One font now covers both scripts, so no lang-conditional CSS is
-// needed.
-const solitreo = Solitreo({
-  variable: "--font-solitreo",
-  subsets: ["hebrew", "latin", "latin-ext"],
-  weight: "400",
+// Caveat remains the original English handwriting face. It intentionally
+// loads only Latin glyphs, so Hebrew text naturally advances to the next
+// family in `--font-caption` instead of requiring lang/dir selectors.
+const caveat = Caveat({
+  variable: "--font-caveat",
+  subsets: ["latin"],
   display: "swap",
+});
+
+// Playpen Sans Hebrew supplies the missing handwritten Hebrew glyphs. The
+// generated variable is placed after Caveat in the caption family stack,
+// preserving Caveat for English and using this face only as glyph fallback.
+const playpenSansHebrew = Playpen_Sans_Hebrew({
+  variable: "--font-playpen-sans-hebrew",
+  subsets: ["hebrew"],
+  display: "swap",
+  adjustFontFallback: false,
 });
 
 export const metadata: Metadata = {
@@ -69,7 +59,7 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${solitreo.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${playpenSansHebrew.variable} h-full antialiased`}
     >
       {/*
         `h-full` (an explicit `height: 100%`), not `min-h-full`

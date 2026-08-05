@@ -168,6 +168,8 @@ export type AlbumPlacement = {
 
 export type SavedAlbumPlacement = AlbumPlacement & { id: string };
 
+const ALBUM_COORDINATE_EPSILON = 0.001;
+
 export type AlbumPlacementFailureCode =
   | 'INVALID_PAYLOAD'
   | 'UNAUTHENTICATED'
@@ -229,6 +231,14 @@ function normalizeAlbumPlacement(value: unknown): AlbumPlacement | null {
   }
 
   return { pageIndex, x, y };
+}
+
+function albumCoordinateMatches(actual: number | null, requested: number): boolean {
+  return (
+    typeof actual === 'number' &&
+    Number.isFinite(actual) &&
+    Math.abs(actual - requested) <= ALBUM_COORDINATE_EPSILON
+  );
 }
 
 function postgrestFailure(error: PostgrestErrorLike): Extract<AlbumPlacementResult, { ok: false }> {
@@ -405,11 +415,11 @@ export async function updateAlbumPlacement(
     verified.id !== normalizedId ||
     verified.album_placement_initialized !== true ||
     verified.album_page_index !== placement.pageIndex ||
-    verified.album_pos_x !== placement.x ||
-    verified.album_pos_y !== placement.y ||
+    !albumCoordinateMatches(verified.album_pos_x, placement.x) ||
+    !albumCoordinateMatches(verified.album_pos_y, placement.y) ||
     verified.album_page_number !== placement.pageIndex ||
-    verified.album_page_x !== placement.x ||
-    verified.album_page_y !== placement.y
+    !albumCoordinateMatches(verified.album_page_x, placement.x) ||
+    !albumCoordinateMatches(verified.album_page_y, placement.y)
   ) {
     return {
       ok: false,
@@ -433,8 +443,8 @@ export async function updateAlbumPlacement(
     placement: {
       id: verified.id,
       pageIndex: verified.album_page_index,
-      x: verified.album_pos_x,
-      y: verified.album_pos_y,
+      x: verified.album_pos_x!,
+      y: verified.album_pos_y!,
     },
   };
 }

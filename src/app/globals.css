@@ -25,16 +25,11 @@
   --shadow-pin: 1px 2px 3px rgba(0, 0, 0, 0.5);
 
   /* Typography */
-  /* --font-solitreo and --font-sans-ui are supplied by next/font/google in
-     src/app/layout.tsx (via each font's `variable` option) and applied as
-     classNames on <html>; they are only *referenced*, not defined, here.
-     Solitreo (subsets: hebrew, latin, latin-ext) is a genuine cursive
-     Hebrew script whose Latin glyphs also render in a flowing script
-     style, so one font covers both scripts — see layout.tsx for the
-     comparison against Caveat/Playpen Sans Hebrew/Rubik Scribble that led
-     here. Generic `cursive` is the last-resort fallback if the webfont
-     fails to load at all. */
-  --font-caption: var(--font-solitreo), cursive;
+  /* next/font supplies these variables on <html>. Caveat is first and owns
+     Latin/English glyphs; because it has no Hebrew glyphs, the browser falls
+     through to Playpen Sans Hebrew for Hebrew captions. */
+  --font-caption: var(--font-caveat), var(--font-playpen-sans-hebrew), cursive;
+  --font-polaroid: var(--font-caption);
   --font-ui: var(--font-sans-ui), system-ui, sans-serif;
 
   /* Motion */

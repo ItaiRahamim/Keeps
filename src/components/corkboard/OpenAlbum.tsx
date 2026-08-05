@@ -88,31 +88,72 @@ function validClientPlacement(value: AlbumPlacement): AlbumPlacement | null {
   return { pageIndex, x, y };
 }
 
+type PageBox = Readonly<{
+  left: number;
+  top: number;
+  width: number;
+  height: number;
+}>;
+
+function pageBoxWithinBook(page: HTMLElement, book: HTMLElement): PageBox | null {
+  const bookRect = book.getBoundingClientRect();
+  const pageRect = page.getBoundingClientRect();
+  if (
+    book.clientWidth <= 0 ||
+    book.clientHeight <= 0 ||
+    bookRect.width <= 0 ||
+    bookRect.height <= 0 ||
+    page.clientWidth <= 0 ||
+    page.clientHeight <= 0
+  ) {
+    return null;
+  }
+
+  const scaleX = book.clientWidth / bookRect.width;
+  const scaleY = book.clientHeight / bookRect.height;
+  return {
+    // Absolute children use the page padding box as their containing block.
+    // Include the border inset so MotionValue x/y and this book-space box
+    // share the exact same origin.
+    left: (pageRect.left - bookRect.left) * scaleX + page.clientLeft,
+    top: (pageRect.top - bookRect.top) * scaleY + page.clientTop,
+    width: page.clientWidth,
+    height: page.clientHeight,
+  };
+}
+
 function placementFromBookDrop(input: {
-  sourcePageIndex: number;
   spreadPageIndexes: readonly [number, number | null];
   bookWidth: number;
-  pageWidth: number;
-  pageHeight: number;
+  bookHeight: number;
+  leftPage: PageBox;
+  rightPage: PageBox | null;
   cardWidth: number;
   cardHeight: number;
-  sourcePageX: number;
-  sourcePageY: number;
+  cardBookX: number;
+  cardBookY: number;
 }): AlbumPlacement | null {
   const measurements = [
     input.bookWidth,
-    input.pageWidth,
-    input.pageHeight,
+    input.bookHeight,
+    input.leftPage.left,
+    input.leftPage.top,
+    input.leftPage.width,
+    input.leftPage.height,
     input.cardWidth,
     input.cardHeight,
-    input.sourcePageX,
-    input.sourcePageY,
+    input.cardBookX,
+    input.cardBookY,
+    ...(input.rightPage
+      ? [input.rightPage.left, input.rightPage.top, input.rightPage.width, input.rightPage.height]
+      : []),
   ];
   if (
     !measurements.every(Number.isFinite) ||
     input.bookWidth <= 0 ||
-    input.pageWidth <= 0 ||
-    input.pageHeight <= 0 ||
+    input.bookHeight <= 0 ||
+    input.leftPage.width <= 0 ||
+    input.leftPage.height <= 0 ||
     input.cardWidth <= 0 ||
     input.cardHeight <= 0
   ) {
@@ -121,26 +162,26 @@ function placementFromBookDrop(input: {
 
   const [leftPageIndex, rightPageIndex] = input.spreadPageIndexes;
   if (!Number.isInteger(leftPageIndex)) return null;
-  const rightPageOffset = Math.max(0, input.bookWidth - input.pageWidth);
-  const sourceOffset = input.sourcePageIndex === rightPageIndex ? rightPageOffset : 0;
   const bookX = clamp(
-    sourceOffset + input.sourcePageX,
+    input.cardBookX,
     0,
     Math.max(0, input.bookWidth - input.cardWidth)
   );
-  const bookY = clamp(input.sourcePageY, 0, Math.max(0, input.pageHeight - input.cardHeight));
-  const destinationPageIndex =
-    rightPageIndex !== null && bookX + input.cardWidth / 2 >= input.bookWidth / 2
-      ? rightPageIndex
-      : leftPageIndex;
-  const destinationOffset = destinationPageIndex === rightPageIndex ? rightPageOffset : 0;
-  const maxX = Math.max(0, input.pageWidth - input.cardWidth);
-  const maxY = Math.max(0, input.pageHeight - input.cardHeight);
+  const bookY = clamp(input.cardBookY, 0, Math.max(0, input.bookHeight - input.cardHeight));
+  const landsOnRight =
+    rightPageIndex !== null &&
+    input.rightPage !== null &&
+    bookX + input.cardWidth / 2 >= input.bookWidth / 2;
+  const destinationPageIndex = landsOnRight ? rightPageIndex : leftPageIndex;
+  const destinationPage = landsOnRight ? input.rightPage : input.leftPage;
+  if (!destinationPage || destinationPageIndex === null) return null;
+  const maxX = Math.max(0, destinationPage.width - input.cardWidth);
+  const maxY = Math.max(0, destinationPage.height - input.cardHeight);
 
   return validClientPlacement({
     pageIndex: destinationPageIndex,
-    x: maxX > 0 ? clamp((bookX - destinationOffset) / maxX, 0, 1) : 0.5,
-    y: maxY > 0 ? clamp(bookY / maxY, 0, 1) : 0.5,
+    x: maxX > 0 ? clamp((bookX - destinationPage.left) / maxX, 0, 1) : 0.5,
+    y: maxY > 0 ? clamp((bookY - destinationPage.top) / maxY, 0, 1) : 0.5,
   });
 }
 
@@ -237,6 +278,13 @@ function storedPlacement(media: MediaRow, maxPageIndex: number): AlbumPlacement 
   };
 }
 
+function maxAlbumPageIndex(itemCount: number): number {
+  // An open physical spread always exposes a left and right leaf, including
+  // a three-photo album whose balanced initial layout occupies only page 0.
+  // Keeping page 1 valid is what allows a cross-spine drop to persist there.
+  return Math.max(1, Math.ceil(itemCount / 2) - 1);
+}
+
 function randomUnit(): number {
   if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
     const random = new Uint32Array(1);
@@ -273,7 +321,7 @@ function buildAlbumLeaves(
   // Two items is the minimum intended density, so this is the largest
   // sensible leaf index for the current album. It also prevents malformed
   // persisted data from allocating thousands of empty DOM pages.
-  const maxPageIndex = Math.max(0, Math.ceil(mediaItems.length / 2) - 1);
+  const maxPageIndex = maxAlbumPageIndex(mediaItems.length);
   const grouped = new Map<number, Array<Omit<PageEntry, 'placement'> & { placement: AlbumPlacement | null }>>();
   mediaItems.forEach((media, mediaIndex) => {
     const optimistic = Object.prototype.hasOwnProperty.call(overrides, media.id)
@@ -288,7 +336,7 @@ function buildAlbumLeaves(
     else grouped.set(pageIndex, [entry]);
   });
 
-  const leafCount = Math.max(defaultSizes.length - 1, ...grouped.keys(), 0) + 1;
+  const leafCount = Math.max(defaultSizes.length - 1, ...grouped.keys(), 1) + 1;
   return Array.from({ length: leafCount }, (_, pageIndex) => {
     const pageEntries = grouped.get(pageIndex) ?? [];
     return {
@@ -397,16 +445,23 @@ function AlbumMemoryCard({
       const card = cardRef.current;
       if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
 
+      const leftPageElement = book.querySelector<HTMLElement>('.open-album-static-page-left');
+      const rightPageElement = book.querySelector<HTMLElement>('.open-album-static-page-right');
+      const leftPage = leftPageElement ? pageBoxWithinBook(leftPageElement, book) : null;
+      const rightPage = rightPageElement ? pageBoxWithinBook(rightPageElement, book) : null;
+      const sourcePage = placement.pageIndex === spreadPageIndexes[1] ? rightPage : leftPage;
+      if (!leftPage || !sourcePage) return;
+
       const nextPlacement = placementFromBookDrop({
-        sourcePageIndex: placement.pageIndex,
         spreadPageIndexes,
         bookWidth: book.clientWidth,
-        pageWidth: page.clientWidth,
-        pageHeight: page.clientHeight,
+        bookHeight: book.clientHeight,
+        leftPage,
+        rightPage,
         cardWidth: card.offsetWidth,
         cardHeight: card.offsetHeight,
-        sourcePageX: x.get(),
-        sourcePageY: y.get(),
+        cardBookX: sourcePage.left + x.get(),
+        cardBookY: sourcePage.top + y.get(),
       });
       onActiveChange(null);
 
@@ -470,16 +525,18 @@ function AlbumMemoryCard({
         if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         const bookRect = book.getBoundingClientRect();
-        const sourceOffset =
-          placement.pageIndex === spreadPageIndexes[1]
-            ? Math.max(0, book.clientWidth - page.clientWidth)
-            : 0;
+        const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
+        const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
+        if (!sourcePageBox) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+          return;
+        }
         dragSessionRef.current = {
           pointerId: event.pointerId,
           startClientX: event.clientX,
           startClientY: event.clientY,
-          originBookX: sourceOffset + x.get(),
-          originY: y.get(),
+          originBookX: sourcePageBox.left + x.get(),
+          originY: sourcePageBox.top + y.get(),
           scaleX: bookRect.width / book.clientWidth,
           scaleY: bookRect.height / book.clientHeight,
         };
@@ -494,10 +551,9 @@ function AlbumMemoryCard({
         const book = bookRef.current;
         const card = cardRef.current;
         if (!page || !book || !card) return;
-        const sourceOffset =
-          placement.pageIndex === spreadPageIndexes[1]
-            ? Math.max(0, book.clientWidth - page.clientWidth)
-            : 0;
+        const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
+        const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
+        if (!sourcePageBox) return;
         const nextBookX = clamp(
           session.originBookX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
           0,
@@ -508,8 +564,8 @@ function AlbumMemoryCard({
           0,
           Math.max(0, book.clientHeight - card.offsetHeight)
         );
-        x.set(nextBookX - sourceOffset);
-        y.set(nextY);
+        x.set(nextBookX - sourcePageBox.left);
+        y.set(nextY - sourcePageBox.top);
       }}
       onPointerUp={(event) => {
         event.preventDefault();
@@ -686,7 +742,7 @@ function OpenAlbumDialog({
 
     const previousPlacement =
       placementOverridesRef.current[media.id] ??
-      storedPlacement(media, Math.max(0, Math.ceil(album.items.length / 2) - 1)) ??
+      storedPlacement(media, maxAlbumPageIndex(album.items.length)) ??
       placement;
     placementOverridesRef.current = {
       ...placementOverridesRef.current,
