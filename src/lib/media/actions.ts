@@ -168,6 +168,149 @@ export type AlbumPlacement = {
 
 export type SavedAlbumPlacement = AlbumPlacement & { id: string };
 
+export type AlbumPlacementFailureCode =
+  | 'INVALID_PAYLOAD'
+  | 'UNAUTHENTICATED'
+  | 'FORBIDDEN_OR_NOT_FOUND'
+  | 'SCHEMA_MISMATCH'
+  | 'RLS_DENIED'
+  | 'CONSTRAINT_VIOLATION'
+  | 'VERIFICATION_FAILED'
+  | 'DATABASE_ERROR';
+
+export type AlbumPlacementResult =
+  | { ok: true; placement: SavedAlbumPlacement }
+  | {
+      ok: false;
+      error: {
+        code: AlbumPlacementFailureCode;
+        message: string;
+        details?: string;
+        hint?: string;
+      };
+    };
+
+type PostgrestErrorLike = {
+  code?: unknown;
+  message?: unknown;
+  details?: unknown;
+  hint?: unknown;
+};
+
+function finiteNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null;
+  if (typeof value !== 'string') return null;
+  const normalized = value.trim();
+  if (!/^[+-]?(?:\d+\.?\d*|\.\d+)(?:e[+-]?\d+)?$/i.test(normalized)) return null;
+  const parsed = Number(normalized);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function normalizeAlbumPlacement(value: unknown): AlbumPlacement | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const input = value as Record<string, unknown>;
+  const pageIndex = finiteNumber(input.pageIndex);
+  const x = finiteNumber(input.x);
+  const y = finiteNumber(input.y);
+
+  if (
+    pageIndex === null ||
+    x === null ||
+    y === null ||
+    !Number.isInteger(pageIndex) ||
+    pageIndex < 0 ||
+    pageIndex > 9999 ||
+    x < 0 ||
+    x > 1 ||
+    y < 0 ||
+    y > 1
+  ) {
+    return null;
+  }
+
+  return { pageIndex, x, y };
+}
+
+function postgrestFailure(error: PostgrestErrorLike): Extract<AlbumPlacementResult, { ok: false }> {
+  const code = typeof error.code === 'string' ? error.code : 'UNKNOWN';
+  const rawMessage = typeof error.message === 'string' ? error.message : 'Unknown database error';
+  const details = typeof error.details === 'string' && error.details ? error.details : undefined;
+  const hint = typeof error.hint === 'string' && error.hint ? error.hint : undefined;
+  const diagnostic = {
+    details: [rawMessage, details].filter(Boolean).join(' — '),
+    hint,
+  };
+
+  // Server-side structured logging preserves the exact PostgREST evidence
+  // even when a deployment's generic HTTP error page would hide it.
+  console.error('updateAlbumPlacement Supabase error', {
+    code,
+    message: rawMessage,
+    details: details ?? null,
+    hint: hint ?? null,
+  });
+
+  if (
+    code === '42703' ||
+    code === 'PGRST204' ||
+    /column .* does not exist|schema cache.*column|could not find.*column/i.test(rawMessage)
+  ) {
+    return {
+      ok: false,
+      error: {
+        code: 'SCHEMA_MISMATCH',
+        message:
+          'Album position columns are missing from Supabase. Run migration 0005_album_placement_compatibility.sql, then reload the PostgREST schema cache.',
+        ...diagnostic,
+      },
+    };
+  }
+
+  // `.single()` reports PGRST116 when the ownership-filtered update returns
+  // no row. Do not reveal whether a foreign row exists.
+  if (code === 'PGRST116') {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_OR_NOT_FOUND',
+        message: 'This photo was not found or your account cannot update it.',
+        ...diagnostic,
+      },
+    };
+  }
+
+  if (code === '42501' || /row-level security|permission denied/i.test(rawMessage)) {
+    return {
+      ok: false,
+      error: {
+        code: 'RLS_DENIED',
+        message: 'Supabase row-level security rejected the album position update.',
+        ...diagnostic,
+      },
+    };
+  }
+
+  if (code === '23514' || code === '23502' || code === '22P02') {
+    return {
+      ok: false,
+      error: {
+        code: 'CONSTRAINT_VIOLATION',
+        message: `Supabase rejected the album coordinates (${code}): ${rawMessage}`,
+        ...diagnostic,
+      },
+    };
+  }
+
+  return {
+    ok: false,
+    error: {
+      code: 'DATABASE_ERROR',
+      message: `Supabase could not save the album position (${code}): ${rawMessage}`,
+      ...diagnostic,
+    },
+  };
+}
+
 /**
  * Persists a photo's proportional position inside a focused album without
  * touching `pos_x` / `pos_y`, which exclusively belong to the global board.
@@ -177,25 +320,41 @@ export type SavedAlbumPlacement = AlbumPlacement & { id: string };
  */
 export async function updateAlbumPlacement(
   id: string,
-  placement: AlbumPlacement
-): Promise<SavedAlbumPlacement> {
-  if (!Number.isInteger(placement.pageIndex) || placement.pageIndex < 0 || placement.pageIndex > 9999) {
-    throw new Error('Invalid album page index');
-  }
-  if (
-    !Number.isFinite(placement.x) ||
-    !Number.isFinite(placement.y) ||
-    placement.x < 0 ||
-    placement.x > 1 ||
-    placement.y < 0 ||
-    placement.y > 1
-  ) {
-    throw new Error('Invalid album page position');
+  placementInput: unknown
+): Promise<AlbumPlacementResult> {
+  const placement = normalizeAlbumPlacement(placementInput);
+  const normalizedId = typeof id === 'string' ? id.trim() : '';
+  const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(
+    normalizedId
+  );
+  if (!placement || !isUuid) {
+    return {
+      ok: false,
+      error: {
+        code: 'INVALID_PAYLOAD',
+        message:
+          'Invalid album position payload. Expected a media id, an integer pageIndex, and finite x/y coordinates between 0 and 1.',
+      },
+    };
   }
 
-  const supabase = await createClient();
-  const userId = await requireUserId(supabase);
-  const { data, error } = await supabase
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let userId: string;
+  try {
+    supabase = await createClient();
+    userId = await requireUserId(supabase);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : 'Not authenticated';
+    return {
+      ok: false,
+      error: {
+        code: 'UNAUTHENTICATED',
+        message: `Album position was not saved: ${message}`,
+      },
+    };
+  }
+
+  const request = supabase
     .from('media')
     .update({
       album_page_index: placement.pageIndex,
@@ -206,13 +365,31 @@ export async function updateAlbumPlacement(
       album_page_y: placement.y,
       album_placement_initialized: true,
     })
-    .eq('id', id)
+    .eq('id', normalizedId)
     .eq('user_id', userId)
     .select('id, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized')
     .single();
+  const { data, error } = await Promise.resolve(request).catch((requestError: unknown) => ({
+    data: null,
+    error: {
+      code: 'FETCH_ERROR',
+      message:
+        requestError instanceof Error
+          ? requestError.message
+          : 'The Supabase request failed before receiving a response',
+    },
+  }));
 
-  if (error) throw error;
-  if (!data) throw new Error('Album placement could not be saved for this photo');
+  if (error) return postgrestFailure(error);
+  if (!data) {
+    return {
+      ok: false,
+      error: {
+        code: 'FORBIDDEN_OR_NOT_FOUND',
+        message: 'This photo was not found or your account cannot update it.',
+      },
+    };
+  }
 
   const verified = data as {
     id: string;
@@ -225,7 +402,7 @@ export async function updateAlbumPlacement(
     album_placement_initialized: boolean;
   };
   if (
-    verified.id !== id ||
+    verified.id !== normalizedId ||
     verified.album_placement_initialized !== true ||
     verified.album_page_index !== placement.pageIndex ||
     verified.album_pos_x !== placement.x ||
@@ -234,15 +411,31 @@ export async function updateAlbumPlacement(
     verified.album_page_x !== placement.x ||
     verified.album_page_y !== placement.y
   ) {
-    throw new Error('Supabase returned an album placement that did not match the requested coordinates');
+    return {
+      ok: false,
+      error: {
+        code: 'VERIFICATION_FAILED',
+        message: 'Supabase returned album coordinates that did not match the requested position.',
+        details: `requested=${JSON.stringify(placement)} returned=${JSON.stringify(verified)}`,
+      },
+    };
   }
 
-  revalidatePath('/');
+  try {
+    revalidatePath('/');
+  } catch (error) {
+    // The row is already written and verified. Cache invalidation must not
+    // turn a successful placement into a client-visible 500/rollback.
+    console.error('updateAlbumPlacement revalidation failed after verified save', error);
+  }
   return {
-    id: verified.id,
-    pageIndex: verified.album_page_index,
-    x: verified.album_pos_x,
-    y: verified.album_pos_y,
+    ok: true,
+    placement: {
+      id: verified.id,
+      pageIndex: verified.album_page_index,
+      x: verified.album_pos_x,
+      y: verified.album_pos_y,
+    },
   };
 }
 

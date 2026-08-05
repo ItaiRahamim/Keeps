@@ -45,13 +45,6 @@ type Turn = {
   targetStart: number;
 };
 
-type BookBounds = Readonly<{
-  width: number;
-  height: number;
-  visualWidth: number;
-  visualHeight: number;
-}>;
-
 type PageEntry = {
   media: MediaRow;
   mediaIndex: number;
@@ -75,6 +68,82 @@ type DragSession = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function validClientPlacement(value: AlbumPlacement): AlbumPlacement | null {
+  const pageIndex = Number(value.pageIndex);
+  const x = Number(value.x);
+  const y = Number(value.y);
+  if (
+    !Number.isInteger(pageIndex) ||
+    pageIndex < 0 ||
+    pageIndex > 9999 ||
+    !Number.isFinite(x) ||
+    !Number.isFinite(y) ||
+    x < 0 ||
+    x > 1 ||
+    y < 0 ||
+    y > 1
+  ) {
+    return null;
+  }
+  return { pageIndex, x, y };
+}
+
+function placementFromBookDrop(input: {
+  sourcePageIndex: number;
+  spreadPageIndexes: readonly [number, number | null];
+  bookWidth: number;
+  pageWidth: number;
+  pageHeight: number;
+  cardWidth: number;
+  cardHeight: number;
+  sourcePageX: number;
+  sourcePageY: number;
+}): AlbumPlacement | null {
+  const measurements = [
+    input.bookWidth,
+    input.pageWidth,
+    input.pageHeight,
+    input.cardWidth,
+    input.cardHeight,
+    input.sourcePageX,
+    input.sourcePageY,
+  ];
+  if (
+    !measurements.every(Number.isFinite) ||
+    input.bookWidth <= 0 ||
+    input.pageWidth <= 0 ||
+    input.pageHeight <= 0 ||
+    input.cardWidth <= 0 ||
+    input.cardHeight <= 0
+  ) {
+    return null;
+  }
+
+  const [leftPageIndex, rightPageIndex] = input.spreadPageIndexes;
+  if (!Number.isInteger(leftPageIndex)) return null;
+  const rightPageOffset = Math.max(0, input.bookWidth - input.pageWidth);
+  const sourceOffset = input.sourcePageIndex === rightPageIndex ? rightPageOffset : 0;
+  const bookX = clamp(
+    sourceOffset + input.sourcePageX,
+    0,
+    Math.max(0, input.bookWidth - input.cardWidth)
+  );
+  const bookY = clamp(input.sourcePageY, 0, Math.max(0, input.pageHeight - input.cardHeight));
+  const destinationPageIndex =
+    rightPageIndex !== null && bookX + input.cardWidth / 2 >= input.bookWidth / 2
+      ? rightPageIndex
+      : leftPageIndex;
+  const destinationOffset = destinationPageIndex === rightPageIndex ? rightPageOffset : 0;
+  const maxX = Math.max(0, input.pageWidth - input.cardWidth);
+  const maxY = Math.max(0, input.pageHeight - input.cardHeight);
+
+  return validClientPlacement({
+    pageIndex: destinationPageIndex,
+    x: maxX > 0 ? clamp((bookX - destinationOffset) / maxX, 0, 1) : 0.5,
+    y: maxY > 0 ? clamp(bookY / maxY, 0, 1) : 0.5,
+  });
 }
 
 function resolveMediaUrl(value: string): string {
@@ -328,26 +397,26 @@ function AlbumMemoryCard({
       const card = cardRef.current;
       if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
 
-      const pageWidth = book.clientWidth / 2;
-      const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? pageWidth : 0;
-      const bookX = clamp(sourceOffset + x.get(), 0, Math.max(0, book.clientWidth - card.offsetWidth));
-      const bookY = clamp(y.get(), 0, Math.max(0, book.clientHeight - card.offsetHeight));
-      const cardCenterX = bookX + card.offsetWidth / 2;
-      const destinationPageIndex =
-        cardCenterX >= pageWidth && spreadPageIndexes[1] !== null
-          ? spreadPageIndexes[1]
-          : spreadPageIndexes[0];
-      const destinationOffset = destinationPageIndex === spreadPageIndexes[1] ? pageWidth : 0;
-      const maxX = Math.max(0, pageWidth - card.offsetWidth);
-      const maxY = Math.max(0, book.clientHeight - card.offsetHeight);
+      const nextPlacement = placementFromBookDrop({
+        sourcePageIndex: placement.pageIndex,
+        spreadPageIndexes,
+        bookWidth: book.clientWidth,
+        pageWidth: page.clientWidth,
+        pageHeight: page.clientHeight,
+        cardWidth: card.offsetWidth,
+        cardHeight: card.offsetHeight,
+        sourcePageX: x.get(),
+        sourcePageY: y.get(),
+      });
       onActiveChange(null);
 
       try {
-        await onCommit(media, {
-          pageIndex: destinationPageIndex,
-          x: maxX > 0 ? clamp((bookX - destinationOffset) / maxX, 0, 1) : 0.5,
-          y: maxY > 0 ? clamp(bookY / maxY, 0, 1) : 0.5,
-        });
+        // An invalid sentinel is consumed by commitPlacement's client guard;
+        // it is never serialized into the Server Action payload.
+        await onCommit(
+          media,
+          nextPlacement ?? { pageIndex: Number.NaN, x: Number.NaN, y: Number.NaN }
+        );
       } catch {
         // commitPlacement exposes the error in the album UI. Consuming it
         // here prevents a rejected pointer-event promise from going global.
@@ -401,7 +470,10 @@ function AlbumMemoryCard({
         if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
         event.currentTarget.setPointerCapture(event.pointerId);
         const bookRect = book.getBoundingClientRect();
-        const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? book.clientWidth / 2 : 0;
+        const sourceOffset =
+          placement.pageIndex === spreadPageIndexes[1]
+            ? Math.max(0, book.clientWidth - page.clientWidth)
+            : 0;
         dragSessionRef.current = {
           pointerId: event.pointerId,
           startClientX: event.clientX,
@@ -422,7 +494,10 @@ function AlbumMemoryCard({
         const book = bookRef.current;
         const card = cardRef.current;
         if (!page || !book || !card) return;
-        const sourceOffset = placement.pageIndex === spreadPageIndexes[1] ? book.clientWidth / 2 : 0;
+        const sourceOffset =
+          placement.pageIndex === spreadPageIndexes[1]
+            ? Math.max(0, book.clientWidth - page.clientWidth)
+            : 0;
         const nextBookX = clamp(
           session.originBookX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
           0,
@@ -556,17 +631,22 @@ function OpenAlbumDialog({
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const bookRef = useRef<HTMLDivElement | null>(null);
-  const latestAlbumItemsRef = useRef(album.items);
   const swipeStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const saveSequenceRef = useRef(0);
   const saveQueueRef = useRef(new Map<string, Promise<SavedAlbumPlacement>>());
   const saveVersionRef = useRef(new Map<string, number>());
   const placementOverridesRef = useRef<Record<string, AlbumPlacement>>({});
-  const initialPlacementCreatedRef = useRef(false);
   const initialSaveStartedRef = useRef(false);
-  const [bookBounds, setBookBounds] = useState<BookBounds | null>(null);
-  const [initialPlacements, setInitialPlacements] = useState<Record<string, AlbumPlacement>>({});
-  const [placementOverrides, setPlacementOverrides] = useState<Record<string, AlbumPlacement>>({});
+  // Normalized fallback positions are available during the first render, so
+  // album pages never depend on ResizeObserver (or a resize event) to exist.
+  // AlbumMemoryCard refines the pixel mapping after mount without hiding the
+  // already-rendered content.
+  const [initialPlacements] = useState<Record<string, AlbumPlacement>>(
+    () => createInitialPlacementOverrides(album.items)
+  );
+  const [placementOverrides, setPlacementOverrides] = useState<Record<string, AlbumPlacement>>(
+    initialPlacements
+  );
   const [saveMessage, setSaveMessage] = useState('');
   const [saveFailed, setSaveFailed] = useState(false);
   const leaves = useMemo(
@@ -582,11 +662,6 @@ function OpenAlbumDialog({
   const title = memoryTagFor(album.items[0]) ?? 'Memory album';
   const canGoBack = visibleSpreadStart > 0 && !turn;
   const canGoForward = visibleSpreadStart < lastSpreadStart && !turn;
-  const bookReady = bookBounds !== null;
-
-  useLayoutEffect(() => {
-    latestAlbumItemsRef.current = album.items;
-  }, [album.items]);
 
   useLayoutEffect(() => {
     placementOverridesRef.current = placementOverrides;
@@ -594,8 +669,22 @@ function OpenAlbumDialog({
 
   const commitPlacement = useCallback(async (
     media: MediaRow,
-    placement: AlbumPlacement
+    placementInput: AlbumPlacement
   ): Promise<SavedAlbumPlacement> => {
+    const placement = validClientPlacement(placementInput);
+    if (!placement) {
+      const validationError = new Error(
+        'Invalid album drop geometry: page, x, and y must be finite page-relative values.'
+      );
+      console.error('updateAlbumPlacement blocked before request', {
+        mediaId: media.id,
+        placement: placementInput,
+      });
+      setSaveFailed(true);
+      setSaveMessage(validationError.message);
+      throw validationError;
+    }
+
     const previousPlacement =
       placementOverridesRef.current[media.id] ??
       storedPlacement(media, Math.max(0, Math.ceil(album.items.length / 2) - 1)) ??
@@ -617,7 +706,16 @@ function OpenAlbumDialog({
     // after Supabase has echoed and verified both deployed + alias columns.
     const previous = saveQueueRef.current.get(media.id);
     const pending = (previous ? previous.catch(() => undefined) : Promise.resolve())
-      .then(() => updateAlbumPlacement(media.id, placement));
+      .then(async () => {
+        const result = await updateAlbumPlacement(media.id, placement);
+        if (!result.ok) {
+          const diagnostic = [result.error.message, result.error.details, result.error.hint]
+            .filter(Boolean)
+            .join(' ');
+          throw new Error(`[${result.error.code}] ${diagnostic}`);
+        }
+        return result.placement;
+      });
     saveQueueRef.current.set(media.id, pending);
 
     try {
@@ -649,7 +747,11 @@ function OpenAlbumDialog({
       }
       if (saveSequenceRef.current === sequence) {
         setSaveFailed(true);
-        setSaveMessage('Could not save this photo’s album position. Try again.');
+        setSaveMessage(
+          error instanceof Error
+            ? error.message
+            : 'Could not save this photo’s album position. Try again.'
+        );
       }
       throw error;
     } finally {
@@ -670,73 +772,6 @@ function OpenAlbumDialog({
     }
     setTurn({ direction, targetStart });
   }, [lastSpreadStart, shouldReduceMotion, turn, visibleSpreadStart]);
-
-  useLayoutEffect(() => {
-    const book = bookRef.current;
-    if (!book) return;
-
-    let layoutFrame: number | null = null;
-    let paintedFrame: number | null = null;
-
-    const cancelScheduledMeasurement = () => {
-      if (layoutFrame !== null) cancelAnimationFrame(layoutFrame);
-      if (paintedFrame !== null) cancelAnimationFrame(paintedFrame);
-      layoutFrame = null;
-      paintedFrame = null;
-    };
-
-    const scheduleMeasurement = () => {
-      cancelScheduledMeasurement();
-      // ResizeObserver fires before paint. Two animation frames ensure the
-      // shared-layout opening transform has painted before cards consume the
-      // book geometry, rather than scattering against a transient 0x0 box.
-      layoutFrame = requestAnimationFrame(() => {
-        layoutFrame = null;
-        paintedFrame = requestAnimationFrame(() => {
-          paintedFrame = null;
-          const rect = book.getBoundingClientRect();
-          const nextBounds = {
-            width: book.clientWidth,
-            height: book.clientHeight,
-            visualWidth: rect.width,
-            visualHeight: rect.height,
-          };
-          if (
-            nextBounds.width <= 0 ||
-            nextBounds.height <= 0 ||
-            nextBounds.visualWidth <= 0 ||
-            nextBounds.visualHeight <= 0
-          )
-            return;
-
-          if (!initialPlacementCreatedRef.current) {
-            initialPlacementCreatedRef.current = true;
-            const placements = createInitialPlacementOverrides(latestAlbumItemsRef.current);
-            setInitialPlacements(placements);
-            placementOverridesRef.current = { ...placements, ...placementOverridesRef.current };
-            setPlacementOverrides(placementOverridesRef.current);
-          }
-          setBookBounds((current) =>
-            current?.width === nextBounds.width &&
-            current.height === nextBounds.height &&
-            current.visualWidth === nextBounds.visualWidth &&
-            current.visualHeight === nextBounds.visualHeight
-              ? current
-              : nextBounds
-          );
-        });
-      });
-    };
-
-    const observer = new ResizeObserver(scheduleMeasurement);
-    observer.observe(book);
-    scheduleMeasurement();
-
-    return () => {
-      observer.disconnect();
-      cancelScheduledMeasurement();
-    };
-  }, [album.id]);
 
   useEffect(() => {
     if (initialSaveStartedRef.current || Object.keys(initialPlacements).length === 0) return;
@@ -921,7 +956,7 @@ function OpenAlbumDialog({
           </div>
           <div className="open-album-static-page open-album-static-page-left">
             <AlbumPage
-              leaf={bookReady ? leaves[baseLeftIndex] : undefined}
+              leaf={leaves[baseLeftIndex]}
               bookRef={bookRef}
               spreadPageIndexes={spreadPageIndexes}
               decorative={Boolean(turn)}
@@ -930,7 +965,7 @@ function OpenAlbumDialog({
           </div>
           <div className="open-album-static-page open-album-static-page-right">
             <AlbumPage
-              leaf={bookReady ? leaves[baseRightIndex] : undefined}
+              leaf={leaves[baseRightIndex]}
               bookRef={bookRef}
               spreadPageIndexes={spreadPageIndexes}
               decorative={Boolean(turn)}
@@ -953,7 +988,7 @@ function OpenAlbumDialog({
             >
               <div className="open-album-sheet-face open-album-sheet-front">
                 <AlbumPage
-                  leaf={bookReady ? leaves[sheetFrontIndex] : undefined}
+                  leaf={leaves[sheetFrontIndex]}
                   bookRef={bookRef}
                   spreadPageIndexes={spreadPageIndexes}
                   decorative
@@ -962,7 +997,7 @@ function OpenAlbumDialog({
               </div>
               <div className="open-album-sheet-face open-album-sheet-back">
                 <AlbumPage
-                  leaf={bookReady ? leaves[sheetBackIndex] : undefined}
+                  leaf={leaves[sheetBackIndex]}
                   bookRef={bookRef}
                   spreadPageIndexes={spreadPageIndexes}
                   decorative
