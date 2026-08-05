@@ -139,13 +139,14 @@
 .open-album-book {
   position: relative;
   display: block;
-  visibility: visible;
-  opacity: 1;
-  width: min(100%, 920px);
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: min(100%, 800px);
+  height: min(600px, 66dvh);
+  min-width: min(100%, 500px);
   min-height: min(320px, 58dvh);
-  aspect-ratio: 1.64 / 1;
-  max-height: min(66dvh, 570px);
   margin: auto;
+  isolation: isolate;
   transform-style: preserve-3d;
   touch-action: none;
 }
@@ -283,7 +284,7 @@
 
 .open-album-binding {
   position: absolute;
-  z-index: 7;
+  z-index: 50;
   top: -1px;
   bottom: -5px;
   left: 50%;
@@ -313,19 +314,28 @@
   box-shadow: 0 0 3px rgba(46, 29, 18, 0.55);
 }
 
-.open-album-static-page,
-.open-album-turning-sheet {
+.open-album-pages {
   position: absolute;
-  top: 0;
-  width: 50%;
+  inset: 0;
+  z-index: 20;
+  display: grid !important;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 100%;
   height: 100%;
+  pointer-events: auto;
 }
 
 .open-album-static-page {
-  z-index: 1;
-  display: block;
-  visibility: visible;
-  opacity: 1;
+  position: relative;
+  inset: auto;
+  z-index: 20;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
+  width: 100%;
+  height: 100%;
   /* Interactive photos may hang over a resting physical leaf. Turning-sheet
      faces remain clipped below so the 3D page mask is still correct. */
   overflow: visible;
@@ -338,11 +348,10 @@
 /* A dragged photo is allowed to hang across the gutter. Lift its complete
    leaf so the neighboring resting page cannot paint over that overhang. */
 .open-album-static-page:has(.open-album-memory-card[data-active='true']) {
-  z-index: 4;
+  z-index: 40;
 }
 
 .open-album-static-page-left {
-  left: 0;
   border-radius: 7px 1px 1px 7px;
   box-shadow:
     inset -24px 0 28px -22px rgba(48, 33, 22, 0.8),
@@ -350,7 +359,6 @@
 }
 
 .open-album-static-page-right {
-  right: 0;
   border-radius: 1px 7px 7px 1px;
   box-shadow:
     inset 24px 0 28px -22px rgba(48, 33, 22, 0.8),
@@ -358,8 +366,12 @@
 }
 
 .open-album-turning-sheet {
+  position: absolute;
+  top: 0;
   right: 0;
-  z-index: 5;
+  z-index: 30;
+  width: 50%;
+  height: 100%;
   transform-origin: left center;
   transform-style: preserve-3d;
 }
@@ -393,10 +405,12 @@
 
 .open-album-page {
   --album-page-cork: var(--color-cork);
-  position: relative;
-  display: block;
-  visibility: visible;
-  opacity: 1;
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  display: block !important;
+  visibility: visible !important;
+  opacity: 1 !important;
   overflow: visible;
   width: 100%;
   height: 100%;

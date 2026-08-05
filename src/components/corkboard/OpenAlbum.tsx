@@ -948,23 +948,25 @@ function OpenAlbumDialog({
           <div className="open-album-binding" aria-hidden="true">
             <span className="open-album-binding-thread" />
           </div>
-          <div className="open-album-static-page open-album-static-page-left">
-            <AlbumPage
-              leaf={leaves[baseLeftIndex]}
-              bookRef={bookRef}
-              spreadPageIndexes={spreadPageIndexes}
-              decorative={Boolean(turn)}
-              onCommit={commitPlacement}
-            />
-          </div>
-          <div className="open-album-static-page open-album-static-page-right">
-            <AlbumPage
-              leaf={leaves[baseRightIndex]}
-              bookRef={bookRef}
-              spreadPageIndexes={spreadPageIndexes}
-              decorative={Boolean(turn)}
-              onCommit={commitPlacement}
-            />
+          <div className="open-album-pages">
+            <div className="open-album-static-page open-album-static-page-left">
+              <AlbumPage
+                leaf={leaves[baseLeftIndex]}
+                bookRef={bookRef}
+                spreadPageIndexes={spreadPageIndexes}
+                decorative={Boolean(turn)}
+                onCommit={commitPlacement}
+              />
+            </div>
+            <div className="open-album-static-page open-album-static-page-right">
+              <AlbumPage
+                leaf={leaves[baseRightIndex]}
+                bookRef={bookRef}
+                spreadPageIndexes={spreadPageIndexes}
+                decorative={Boolean(turn)}
+                onCommit={commitPlacement}
+              />
+            </div>
           </div>
 
           {turn ? (
