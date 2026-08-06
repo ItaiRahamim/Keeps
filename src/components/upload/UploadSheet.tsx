@@ -13,6 +13,34 @@ import './upload-sheet.css';
 
 type Stage = 'idle' | 'picked-video' | 'processing' | 'uploading' | 'error';
 
+type BatchMetadata = Readonly<{
+  caption: string | null;
+  memoryTag: string | null;
+}>;
+
+function snapshotBatchMetadata(
+  caption: string,
+  memoryTag: string,
+  batchSize: number
+): BatchMetadata {
+  const normalizedMemoryTag = memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null;
+  const generatedBatchName =
+    batchSize > 1
+      ? `Memories from ${new Intl.DateTimeFormat('en-US', {
+          month: 'long',
+          day: 'numeric',
+          year: 'numeric',
+        }).format(new Date())}`
+      : null;
+  return {
+    caption: caption.trim() || null,
+    // A blank multi-upload must still have one explicit shared key. Leaving
+    // this null makes clustering fall back independently to every file's
+    // EXIF date/location, which can split one picker batch into many albums.
+    memoryTag: normalizedMemoryTag ?? generatedBatchName,
+  };
+}
+
 export type UploadSheetProps = {
   /** Called once all selected rows are fully created (and their DB-derived
    *  rotations patched in) so the caller can add the batch without reloads. */
@@ -39,6 +67,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
   const [progress, setProgress] = useState(0);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const batchMetadataRef = useRef<BatchMetadata | null>(null);
 
   const reset = useCallback(() => {
     setStage('idle');
@@ -46,6 +75,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
     setVideoQueue([]);
     setCaption('');
     setMemoryTag('');
+    batchMetadataRef.current = null;
     setProgress(0);
     setError(null);
   }, []);
@@ -56,7 +86,10 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
   }, [reset]);
 
   const finishUploads = useCallback(
-    async (processedBatch: ProcessedUpload[]): Promise<MediaRow[] | null> => {
+    async (
+      processedBatch: ProcessedUpload[],
+      batchMetadata: BatchMetadata
+    ): Promise<MediaRow[] | null> => {
       if (processedBatch.length === 0) return [];
       setStage('uploading');
       setProgress(0);
@@ -72,19 +105,20 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
             })
           )
         );
-        const normalizedMemoryTag = memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null;
         const createdBatch = await Promise.all(
           processedBatch.map((processed, index) => {
             const uploaded = uploadedBatch[index];
-            const drop = getDropPosition(normalizedMemoryTag);
+            const drop = getDropPosition(batchMetadata.memoryTag);
 
             return createMedia({
               media_type: processed.mediaType,
               original_url: uploaded.originalUrl,
               thumbnail_url: uploaded.thumbnailUrl,
               thumbnail_data: processed.thumbnail.lqip,
-              caption: caption.trim() || null,
-              memory_tag: normalizedMemoryTag,
+              caption: batchMetadata.caption,
+              // This immutable batch snapshot is passed verbatim to every
+              // createMedia call, including videos captured minutes later.
+              memory_tag: batchMetadata.memoryTag,
               lat_lng: processed.lat_lng,
               captured_at: processed.captured_at,
               duration_ms: processed.duration_ms,
@@ -126,13 +160,15 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
         return null;
       }
     },
-    [caption, memoryTag, getDropPosition, onCreated, router]
+    [getDropPosition, onCreated, router]
   );
 
   const handleFilesSelected = useCallback(
     async (selectedFiles: File[]) => {
       if (selectedFiles.length === 0) return;
       setError(null);
+      const batchMetadata = snapshotBatchMetadata(caption, memoryTag, selectedFiles.length);
+      batchMetadataRef.current = batchMetadata;
 
       const imageFiles = selectedFiles.filter((file) => !file.type.startsWith('video/'));
       const queuedVideos = selectedFiles.filter((file) => file.type.startsWith('video/'));
@@ -147,7 +183,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
       setStage('processing');
       try {
         const processedImages = await Promise.all(imageFiles.map((file) => processImageFile(file)));
-        const created = await finishUploads(processedImages);
+        const created = await finishUploads(processedImages, batchMetadata);
         if (!created) return;
 
         if (queuedVideos.length > 0) {
@@ -163,12 +199,18 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
         setStage('error');
       }
     },
-    [closeSheet, finishUploads]
+    [caption, closeSheet, finishUploads, memoryTag]
   );
 
   const handleVideoCaptured = useCallback(
     async (processed: ProcessedUpload) => {
-      const created = await finishUploads([processed]);
+      const batchMetadata = batchMetadataRef.current;
+      if (!batchMetadata) {
+        setError('Upload batch metadata was lost. Please select the files again.');
+        setStage('error');
+        return;
+      }
+      const created = await finishUploads([processed], batchMetadata);
       if (!created) return;
 
       const remainingVideos = videoQueue.slice(1);
