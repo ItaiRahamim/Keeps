@@ -22,6 +22,10 @@ const caveat = Caveat({
   variable: "--font-caveat",
   subsets: ["latin"],
   display: "swap",
+  // next/font otherwise injects "Caveat Fallback" into this variable.
+  // That metric fallback contains Hebrew glyphs and captures them before
+  // the following Playpen family can be considered by the browser.
+  adjustFontFallback: false,
 });
 
 // Playpen Sans Hebrew supplies the missing handwritten Hebrew glyphs. The

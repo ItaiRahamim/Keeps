@@ -363,6 +363,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     setItems((prev) => prev.map((item) => (item.id === id ? { ...item, caption } : item)));
   }, []);
 
+  const handleAlbumNameChange = useCallback((mediaIds: string[], name: string | null) => {
+    const renamedIds = new Set(mediaIds);
+    setItems((prev) =>
+      prev.map((item) => (renamedIds.has(item.id) ? { ...item, memory_tag: name } : item))
+    );
+  }, []);
+
   const handleBringToFront = useCallback(() => {
     zCounterRef.current += 1;
     return zCounterRef.current;
@@ -384,9 +391,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     setViewMode(nextMode);
   }, [viewMode]);
 
-  const handleCreated = useCallback((row: MediaRow) => {
-    setItems((prev) => [...prev, row]);
-    zCounterRef.current = Math.max(zCounterRef.current, row.z_index);
+  const handleCreated = useCallback((rows: MediaRow[]) => {
+    if (rows.length === 0) return;
+    setItems((prev) => [...prev, ...rows]);
+    zCounterRef.current = Math.max(zCounterRef.current, ...rows.map((row) => row.z_index));
   }, []);
 
   const handleAlbumPlacementChange = useCallback((mediaId: string, placement: AlbumPlacement) => {
@@ -499,7 +507,12 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
             ))}
           </motion.div>
         ) : (
-          <LibraryView albums={libraryAlbums} onOpen={handleOpenAlbum} inactive={isAlbumModalActive} />
+          <LibraryView
+            albums={libraryAlbums}
+            onOpen={handleOpenAlbum}
+            onNameChange={handleAlbumNameChange}
+            inactive={isAlbumModalActive}
+          />
         )}
       </AnimatePresence>
 

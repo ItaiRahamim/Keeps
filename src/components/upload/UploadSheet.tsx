@@ -14,9 +14,9 @@ import './upload-sheet.css';
 type Stage = 'idle' | 'picked-video' | 'processing' | 'uploading' | 'error';
 
 export type UploadSheetProps = {
-  /** Called once the row is fully created (and its DB-derived rotation
-   *  patched in) so the caller can add it to the board without a reload. */
-  onCreated: (row: MediaRow) => void;
+  /** Called once all selected rows are fully created (and their DB-derived
+   *  rotations patched in) so the caller can add the batch without reloads. */
+  onCreated: (rows: MediaRow[]) => void;
   /** Asks the caller (Corkboard) for a reasonable pos_x/pos_y for a new
    *  card, in board-surface coordinates. */
   getDropPosition: (memoryTag: string | null) => { x: number; y: number };
@@ -33,6 +33,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
   const [open, setOpen] = useState(false);
   const [stage, setStage] = useState<Stage>('idle');
   const [videoFile, setVideoFile] = useState<File | null>(null);
+  const [videoQueue, setVideoQueue] = useState<File[]>([]);
   const [caption, setCaption] = useState('');
   const [memoryTag, setMemoryTag] = useState('');
   const [progress, setProgress] = useState(0);
@@ -42,6 +43,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
   const reset = useCallback(() => {
     setStage('idle');
     setVideoFile(null);
+    setVideoQueue([]);
     setCaption('');
     setMemoryTag('');
     setProgress(0);
@@ -53,47 +55,57 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
     reset();
   }, [reset]);
 
-  const finishUpload = useCallback(
-    async (processed: ProcessedUpload) => {
+  const finishUploads = useCallback(
+    async (processedBatch: ProcessedUpload[]): Promise<MediaRow[] | null> => {
+      if (processedBatch.length === 0) return [];
       setStage('uploading');
       setProgress(0);
       setError(null);
       try {
-        const uploaded = await uploadProcessedMedia(processed, setProgress);
+        const progressByFile = processedBatch.map(() => 0);
+        const uploadedBatch = await Promise.all(
+          processedBatch.map((processed, index) =>
+            uploadProcessedMedia(processed, (nextProgress) => {
+              progressByFile[index] = nextProgress;
+              const aggregate = progressByFile.reduce((total, current) => total + current, 0);
+              setProgress(Math.round(aggregate / progressByFile.length));
+            })
+          )
+        );
         const normalizedMemoryTag = memoryTag.normalize('NFKC').trim().replace(/\s+/g, ' ') || null;
-        const drop = getDropPosition(normalizedMemoryTag);
+        const createdBatch = await Promise.all(
+          processedBatch.map((processed, index) => {
+            const uploaded = uploadedBatch[index];
+            const drop = getDropPosition(normalizedMemoryTag);
 
-        // `createMedia`'s input requires `rotation` up front, but the
-        // deterministic per-card tilt (design-system.md §5) is a pure
-        // function of the row's *server-assigned* `id`, which we only learn
-        // once this call returns — chicken-and-egg. We insert with a 0deg
-        // placeholder, then immediately patch the real value in below.
-        // Note this patch is for DB consistency only: Polaroid.tsx derives
-        // rotation from `id` directly at render time and never trusts this
-        // column, so what's painted on screen is correct even in the brief
-        // window before the patch lands.
-        const created = await createMedia({
-          media_type: processed.mediaType,
-          original_url: uploaded.originalUrl,
-          thumbnail_url: uploaded.thumbnailUrl,
-          thumbnail_data: processed.thumbnail.lqip,
-          caption: caption.trim() || null,
-          memory_tag: normalizedMemoryTag,
-          lat_lng: processed.lat_lng,
-          captured_at: processed.captured_at,
-          duration_ms: processed.duration_ms,
-          width: processed.width,
-          height: processed.height,
-          pos_x: drop.x,
-          pos_y: drop.y,
-          rotation: 0,
-        });
+            return createMedia({
+              media_type: processed.mediaType,
+              original_url: uploaded.originalUrl,
+              thumbnail_url: uploaded.thumbnailUrl,
+              thumbnail_data: processed.thumbnail.lqip,
+              caption: caption.trim() || null,
+              memory_tag: normalizedMemoryTag,
+              lat_lng: processed.lat_lng,
+              captured_at: processed.captured_at,
+              duration_ms: processed.duration_ms,
+              width: processed.width,
+              height: processed.height,
+              pos_x: drop.x,
+              pos_y: drop.y,
+              rotation: 0,
+            });
+          })
+        );
 
-        const rotation = rotationForId(created.id);
-        await updateMediaTransform(created.id, { rotation });
+        const createdWithRotations = await Promise.all(
+          createdBatch.map(async (created) => {
+            const rotation = rotationForId(created.id);
+            await updateMediaTransform(created.id, { rotation });
+            return { ...created, rotation };
+          })
+        );
 
-        onCreated({ ...created, rotation });
-        closeSheet();
+        onCreated(createdWithRotations);
 
         // Defense-in-depth: `onCreated` above already splices the new row
         // into Corkboard's live client state, and `createMedia`/
@@ -106,34 +118,69 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
         // cheap, harmless, and closes any gap there even if it isn't the
         // primary cause of the reported blank-board bug.
         router.refresh();
+        return createdWithRotations;
       } catch (err) {
         console.error('upload failed', err);
         setError(err instanceof Error ? err.message : 'Upload failed. Please try again.');
         setStage('error');
+        return null;
       }
     },
-    [caption, memoryTag, getDropPosition, onCreated, closeSheet, router]
+    [caption, memoryTag, getDropPosition, onCreated, router]
   );
 
-  const handleFileSelected = useCallback(
-    async (file: File) => {
+  const handleFilesSelected = useCallback(
+    async (selectedFiles: File[]) => {
+      if (selectedFiles.length === 0) return;
       setError(null);
-      if (file.type.startsWith('video/')) {
-        setVideoFile(file);
+
+      const imageFiles = selectedFiles.filter((file) => !file.type.startsWith('video/'));
+      const queuedVideos = selectedFiles.filter((file) => file.type.startsWith('video/'));
+
+      if (imageFiles.length === 0 && queuedVideos.length > 0) {
+        setVideoQueue(queuedVideos);
+        setVideoFile(queuedVideos[0]);
         setStage('picked-video');
         return;
       }
+
       setStage('processing');
       try {
-        const processed = await processImageFile(file);
-        await finishUpload(processed);
+        const processedImages = await Promise.all(imageFiles.map((file) => processImageFile(file)));
+        const created = await finishUploads(processedImages);
+        if (!created) return;
+
+        if (queuedVideos.length > 0) {
+          setVideoQueue(queuedVideos);
+          setVideoFile(queuedVideos[0]);
+          setStage('picked-video');
+        } else {
+          closeSheet();
+        }
       } catch (err) {
-        console.error('processImageFile failed', err);
-        setError(err instanceof Error ? err.message : 'Could not process that image.');
+        console.error('processImageFile batch failed', err);
+        setError(err instanceof Error ? err.message : 'Could not process the selected images.');
         setStage('error');
       }
     },
-    [finishUpload]
+    [closeSheet, finishUploads]
+  );
+
+  const handleVideoCaptured = useCallback(
+    async (processed: ProcessedUpload) => {
+      const created = await finishUploads([processed]);
+      if (!created) return;
+
+      const remainingVideos = videoQueue.slice(1);
+      if (remainingVideos.length > 0) {
+        setVideoQueue(remainingVideos);
+        setVideoFile(remainingVideos[0]);
+        setStage('picked-video');
+      } else {
+        closeSheet();
+      }
+    },
+    [closeSheet, finishUploads, videoQueue]
   );
 
   return (
@@ -179,9 +226,10 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
                   ref={fileInputRef}
                   type="file"
                   accept="image/*,video/*"
+                  multiple
                   onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) void handleFileSelected(file);
+                    const files = Array.from(e.target.files ?? []);
+                    if (files.length > 0) void handleFilesSelected(files);
                     e.target.value = '';
                   }}
                 />
@@ -189,7 +237,11 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
             ) : null}
 
             {stage === 'picked-video' && videoFile ? (
-              <VideoFramePicker file={videoFile} onCapture={(processed) => void finishUpload(processed)} onCancel={reset} />
+              <VideoFramePicker
+                file={videoFile}
+                onCapture={handleVideoCaptured}
+                onCancel={reset}
+              />
             ) : null}
 
             {stage === 'processing' ? <p className="upload-status">Processing…</p> : null}
@@ -220,7 +272,7 @@ export default function UploadSheet({ onCreated, getDropPosition }: UploadSheetP
 
 type VideoFramePickerProps = {
   file: File;
-  onCapture: (processed: ProcessedUpload) => void;
+  onCapture: (processed: ProcessedUpload) => Promise<void>;
   onCancel: () => void;
 };
 
@@ -259,7 +311,7 @@ function VideoFramePicker({ file, onCapture, onCancel }: VideoFramePickerProps) 
             setCapturing(true);
             try {
               const processed = await captureVideoFrame(video, file);
-              onCapture(processed);
+              await onCapture(processed);
             } finally {
               setCapturing(false);
             }

@@ -24,6 +24,8 @@ import { getPolaroidGeometry, POLAROID_MEDIA_WIDTH_PX } from '../polaroid/sizing
 import './open-album.css';
 
 const MAX_ITEMS_PER_PAGE = 3;
+const MAX_ALBUM_PAGE_INDEX = 9999;
+const PAGES_PER_SPREAD = 2;
 const KEYBOARD_NUDGE = 0.035;
 
 export type OpenAlbumData = {
@@ -75,7 +77,7 @@ function validClientPlacement(value: AlbumPlacement): AlbumPlacement | null {
   if (
     !Number.isInteger(pageIndex) ||
     pageIndex < 0 ||
-    pageIndex > 9999 ||
+    pageIndex > MAX_ALBUM_PAGE_INDEX ||
     !Number.isFinite(x) ||
     !Number.isFinite(y) ||
     x < 0 ||
@@ -253,7 +255,7 @@ function defaultPlacement(media: MediaRow, pageIndex: number, slotIndex: number,
   };
 }
 
-function storedPlacement(media: MediaRow, maxPageIndex: number): AlbumPlacement | null {
+function storedPlacement(media: MediaRow): AlbumPlacement | null {
   if (media.album_placement_initialized !== true) return null;
 
   // The deployed-name fields are authoritative. The 0004 aliases remain a
@@ -266,23 +268,26 @@ function storedPlacement(media: MediaRow, maxPageIndex: number): AlbumPlacement 
     x === null ||
     y === null ||
     !Number.isInteger(pageIndex) ||
+    pageIndex < 0 ||
+    pageIndex > MAX_ALBUM_PAGE_INDEX ||
     !Number.isFinite(x) ||
     !Number.isFinite(y)
   ) {
     return null;
   }
   return {
-    pageIndex: clamp(pageIndex, 0, maxPageIndex),
+    pageIndex,
     x: clamp(x, 0, 1),
     y: clamp(y, 0, 1),
   };
 }
 
-function maxAlbumPageIndex(itemCount: number): number {
-  // An open physical spread always exposes a left and right leaf, including
-  // a three-photo album whose balanced initial layout occupies only page 0.
-  // Keeping page 1 valid is what allows a cross-spine drop to persist there.
-  return Math.max(1, Math.ceil(itemCount / 2) - 1);
+function leafCountThroughBlankSpread(highestUsedPageIndex: number): number {
+  const occupiedSpreadStart =
+    Math.floor(highestUsedPageIndex / PAGES_PER_SPREAD) * PAGES_PER_SPREAD;
+  const trailingBlankSpreadEnd =
+    occupiedSpreadStart + PAGES_PER_SPREAD * 2 - 1;
+  return Math.min(MAX_ALBUM_PAGE_INDEX, trailingBlankSpreadEnd) + 1;
 }
 
 function randomUnit(): number {
@@ -317,17 +322,12 @@ function buildAlbumLeaves(
   mediaItems: MediaRow[],
   overrides: Record<string, AlbumPlacement>
 ): AlbumLeaf[] {
-  const defaultSizes = balancedPageSizes(mediaItems.length);
-  // Two items is the minimum intended density, so this is the largest
-  // sensible leaf index for the current album. It also prevents malformed
-  // persisted data from allocating thousands of empty DOM pages.
-  const maxPageIndex = maxAlbumPageIndex(mediaItems.length);
   const grouped = new Map<number, Array<Omit<PageEntry, 'placement'> & { placement: AlbumPlacement | null }>>();
   mediaItems.forEach((media, mediaIndex) => {
     const optimistic = Object.prototype.hasOwnProperty.call(overrides, media.id)
       ? overrides[media.id]
       : null;
-    const saved = optimistic ?? storedPlacement(media, maxPageIndex);
+    const saved = optimistic ?? storedPlacement(media);
 
     const pageIndex = saved?.pageIndex ?? defaultPageIndex(mediaIndex, mediaItems.length);
     const entry = { media, mediaIndex, placement: saved };
@@ -336,7 +336,12 @@ function buildAlbumLeaves(
     else grouped.set(pageIndex, [entry]);
   });
 
-  const leafCount = Math.max(defaultSizes.length - 1, ...grouped.keys(), 1) + 1;
+  const highestUsedPageIndex = Math.max(...grouped.keys(), 0);
+  // Always keep the complete spread after the last occupied spread empty.
+  // Dropping onto either of those leaves makes it occupied, which naturally
+  // extends the memoized leaf model by another blank spread on the same
+  // optimistic render.
+  const leafCount = leafCountThroughBlankSpread(highestUsedPageIndex);
   return Array.from({ length: leafCount }, (_, pageIndex) => {
     const pageEntries = grouped.get(pageIndex) ?? [];
     return {
@@ -742,7 +747,7 @@ function OpenAlbumDialog({
 
     const previousPlacement =
       placementOverridesRef.current[media.id] ??
-      storedPlacement(media, maxAlbumPageIndex(album.items.length)) ??
+      storedPlacement(media) ??
       placement;
     placementOverridesRef.current = {
       ...placementOverridesRef.current,
@@ -814,7 +819,7 @@ function OpenAlbumDialog({
         saveQueueRef.current.delete(media.id);
       }
     }
-  }, [album.items.length, onPlacementChange]);
+  }, [onPlacementChange]);
 
   const requestTurn = useCallback((direction: -1 | 1) => {
     if (turn) return;

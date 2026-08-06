@@ -459,6 +459,90 @@ export async function updateCaption(id: string, caption: string): Promise<void> 
   revalidatePath('/');
 }
 
+export type AlbumNameResult =
+  | { ok: true; mediaIds: string[]; name: string | null }
+  | { ok: false; message: string };
+
+/**
+ * Renames a derived album by updating the shared `memory_tag` on every row
+ * that currently belongs to it. The ownership preflight is intentionally
+ * separate from the UPDATE: a mixed-owner album must fail atomically from
+ * the UI's perspective instead of partially renaming and splitting apart.
+ */
+export async function updateAlbumName(
+  mediaIdsInput: unknown,
+  nameInput: unknown
+): Promise<AlbumNameResult> {
+  const mediaIds = Array.isArray(mediaIdsInput)
+    ? [...new Set(mediaIdsInput.filter((id): id is string => typeof id === 'string').map((id) => id.trim()))]
+    : [];
+  const isUuid = (id: string) =>
+    /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id);
+  if (mediaIds.length === 0 || mediaIds.length > 500 || mediaIds.some((id) => !isUuid(id))) {
+    return { ok: false, message: 'Invalid album media ids.' };
+  }
+  if (nameInput !== null && typeof nameInput !== 'string') {
+    return { ok: false, message: 'Album name must be text.' };
+  }
+
+  let name: string | null;
+  try {
+    name = normalizeMemoryTagForStorage(nameInput as string | null);
+  } catch (error) {
+    return {
+      ok: false,
+      message: error instanceof Error ? error.message : 'Invalid album name.',
+    };
+  }
+
+  let supabase: Awaited<ReturnType<typeof createClient>>;
+  let userId: string;
+  try {
+    supabase = await createClient();
+    userId = await requireUserId(supabase);
+  } catch {
+    return { ok: false, message: 'Sign in again to rename this album.' };
+  }
+
+  const { data: existingRows, error: lookupError } = await supabase
+    .from('media')
+    .select('id, user_id')
+    .in('id', mediaIds);
+  if (lookupError) {
+    console.error('updateAlbumName ownership lookup failed', lookupError);
+    return { ok: false, message: `Could not verify album ownership: ${lookupError.message}` };
+  }
+  const ownedRows = (existingRows ?? []) as Array<{ id: string; user_id: string }>;
+  if (
+    ownedRows.length !== mediaIds.length ||
+    ownedRows.some((row) => row.user_id !== userId)
+  ) {
+    return { ok: false, message: 'You can only rename albums containing your own uploads.' };
+  }
+
+  const { data: updatedRows, error: updateError } = await supabase
+    .from('media')
+    .update({ memory_tag: name })
+    .in('id', mediaIds)
+    .eq('user_id', userId)
+    .select('id, memory_tag');
+  if (updateError) {
+    console.error('updateAlbumName update failed', updateError);
+    return { ok: false, message: `Could not save the album name: ${updateError.message}` };
+  }
+
+  const verified = (updatedRows ?? []) as Array<{ id: string; memory_tag: string | null }>;
+  if (
+    verified.length !== mediaIds.length ||
+    verified.some((row) => row.memory_tag !== name || !mediaIds.includes(row.id))
+  ) {
+    return { ok: false, message: 'Supabase did not confirm the complete album rename.' };
+  }
+
+  revalidatePath('/');
+  return { ok: true, mediaIds, name };
+}
+
 export async function deleteMedia(id: string): Promise<void> {
   const supabase = await createClient();
   await requireUserId(supabase);
