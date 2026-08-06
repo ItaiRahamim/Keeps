@@ -53,6 +53,15 @@ function resolveMediaUrl(value: string): string {
   return getMediaUrl(value);
 }
 
+function isPolaroidInteractiveTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(
+      '.polaroid-chin[data-polaroid-interactive="true"], input, textarea, select, button, label, a[href], video[controls], [contenteditable="true"]'
+    ) !== null
+  );
+}
+
 export type PolaroidProps = {
   media: MediaRow;
   /**
@@ -201,10 +210,13 @@ export default function Polaroid({
       // capture plus `touch-action: none` gives us exact, synchronous deltas
       // on iOS without allowing the delegated board handler to pan as well.
       onPointerDown={(event) => {
+        // Native form/edit controls must receive their untouched pointer
+        // sequence so Safari can focus them and place the text caret. This
+        // guard intentionally runs before stopPropagation and pointer capture.
+        if (isPolaroidInteractiveTarget(event.target)) return;
         event.stopPropagation();
         if (event.pointerType === 'mouse' && event.button !== 0) return;
         if (dragSessionRef.current) return;
-        if (event.target instanceof Element && event.target.closest('input, textarea, button')) return;
 
         const zIndex = onBringToFront(media.id);
         const pointerStart = { x: event.clientX, y: event.clientY };
@@ -329,7 +341,18 @@ export default function Polaroid({
 
         <div
           className="polaroid-chin"
-          onDoubleClick={() => {
+          data-polaroid-interactive={!onActivate ? 'true' : undefined}
+          onPointerDown={(event) => {
+            if (!onActivate) event.stopPropagation();
+          }}
+          onPointerUp={(event) => {
+            if (!onActivate) event.stopPropagation();
+          }}
+          onClick={(event) => {
+            if (!onActivate) event.stopPropagation();
+          }}
+          onDoubleClick={(event) => {
+            event.stopPropagation();
             if (!onActivate) setIsEditingCaption(true);
           }}
         >
@@ -338,9 +361,14 @@ export default function Polaroid({
               autoFocus
               className="polaroid-chin-input"
               value={captionDraft}
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
+              onDoubleClick={(event) => event.stopPropagation()}
               onChange={(e) => setCaptionDraft(e.target.value)}
               onBlur={commitCaption}
               onKeyDown={(e) => {
+                e.stopPropagation();
                 if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
                 if (e.key === 'Escape') {
                   setCaptionDraft(media.caption ?? '');

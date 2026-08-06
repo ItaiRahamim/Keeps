@@ -45,6 +45,7 @@
   content: '';
   position: absolute;
   inset: 0;
+  z-index: 1;
   pointer-events: none;
   opacity: 0.04;
   mix-blend-mode: overlay;
@@ -75,6 +76,7 @@
 .polaroid-play-badge {
   position: absolute;
   inset: 0;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -89,6 +91,7 @@
 
 .polaroid-chin {
   position: absolute;
+  z-index: 50;
   left: 12px;
   right: 12px;
   bottom: 8px;
@@ -103,16 +106,22 @@
   text-align: center;
   overflow: hidden;
   cursor: text;
+  pointer-events: auto;
 }
 
 .polaroid-chin span {
+  position: relative;
+  z-index: 50;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 100%;
+  pointer-events: auto;
 }
 
 .polaroid-chin-input {
+  position: relative;
+  z-index: 51;
   width: 100%;
   border: none;
   outline: none;
@@ -121,6 +130,11 @@
   font-size: 1.35rem;
   text-align: center;
   color: var(--color-polaroid-shadow-tint);
+  cursor: text;
+  pointer-events: auto;
+  touch-action: manipulation;
+  user-select: text;
+  -webkit-user-select: text;
 }
 
 .polaroid-chin-placeholder {
