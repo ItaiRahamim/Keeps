@@ -6,7 +6,7 @@ import ProfileDashboard, {
 } from '@/components/profile/ProfileDashboard';
 import { getMediaUrl } from '@/lib/contracts';
 import { getMedia } from '@/lib/media/actions';
-import { groupIntoAlbums } from '@/lib/media/clustering';
+import { groupIntoLibraryAlbums } from '@/lib/media/clustering';
 import { createClient } from '@/lib/supabase/server';
 import type { MediaRow, UserProfile } from '@/lib/types';
 import '@/components/corkboard/cork-texture.css';
@@ -90,11 +90,17 @@ export default async function ProfilePage() {
         updated_at: user.updated_at ?? user.created_at,
       };
 
+  const albums = groupIntoLibraryAlbums(media);
+  const albumIdByMediaId = new Map(
+    albums.flatMap((album) => album.items.map((item) => [item.id, album.id] as const))
+  );
+
   const personalMemories: PersonalMemorySummary[] = media
     .filter((item) => item.user_id === user.id)
     .sort((a, b) => timestampFor(b).localeCompare(timestampFor(a)))
     .map((item) => ({
       id: item.id,
+      albumId: albumIdByMediaId.get(item.id) ?? `album-loose-${item.id}`,
       title: item.caption?.trim() || item.memory_tag?.trim() || 'Untitled memory',
       albumName: item.memory_tag?.trim() || null,
       imageUrl: memoryImage(item),
@@ -102,16 +108,16 @@ export default async function ProfilePage() {
       timestamp: timestampFor(item),
     }));
 
-  const participatedAlbums: ParticipatedAlbumSummary[] = groupIntoAlbums(media).flatMap((item) => {
-    if (item.kind !== 'album' || !item.items.some((mediaItem) => mediaItem.user_id === user.id)) {
+  const participatedAlbums: ParticipatedAlbumSummary[] = albums.flatMap((album) => {
+    if (album.kind !== 'album' || !album.items.some((mediaItem) => mediaItem.user_id === user.id)) {
       return [];
     }
     return [{
-      id: item.id,
-      title: titleForAlbum(item.items),
-      totalCount: item.items.length,
-      contributedCount: item.items.filter((mediaItem) => mediaItem.user_id === user.id).length,
-      previewUrls: item.items.map(memoryImage).filter((url): url is string => Boolean(url)).slice(0, 3),
+      id: album.id,
+      title: titleForAlbum(album.items),
+      totalCount: album.items.length,
+      contributedCount: album.items.filter((mediaItem) => mediaItem.user_id === user.id).length,
+      previewUrls: album.items.map(memoryImage).filter((url): url is string => Boolean(url)).slice(0, 3),
     }];
   });
 

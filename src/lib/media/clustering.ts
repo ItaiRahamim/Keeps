@@ -13,6 +13,12 @@ export type BoardItem =
   | { kind: 'single'; media: MediaRow }
   | { kind: 'album'; id: string; items: MediaRow[] };
 
+export type LibraryAlbumGroup = {
+  kind: 'album' | 'loose';
+  id: string;
+  items: MediaRow[];
+};
+
 // ---------------------------------------------------------------------------
 // Tunables — documented per AGENTS.md's ask ("document your chosen threshold
 // and reasoning in a comment").
@@ -333,4 +339,17 @@ export function groupIntoAlbums(media: MediaRow[]): BoardItem[] {
   for (const item of ungrouped) result.push({ kind: 'single', media: item });
 
   return result;
+}
+
+/**
+ * Canonical album identity used by both the library and URL destinations.
+ * Loose memories remain navigable as one-item albums using the same id the
+ * corkboard library has always assigned them.
+ */
+export function groupIntoLibraryAlbums(media: MediaRow[]): LibraryAlbumGroup[] {
+  return groupIntoAlbums(media).map((item) =>
+    item.kind === 'album'
+      ? { kind: 'album', id: item.id, items: item.items }
+      : { kind: 'loose', id: `album-loose-${item.media.id}`, items: [item.media] }
+  );
 }

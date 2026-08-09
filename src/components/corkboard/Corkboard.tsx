@@ -4,12 +4,13 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { ClusterRow, MediaRow, UserProfile } from '@/lib/types';
 import type { AlbumPlacement } from '@/lib/media/actions';
-import { getTaggedDropPosition, groupIntoAlbums } from '@/lib/media/clustering';
+import { getTaggedDropPosition, groupIntoLibraryAlbums } from '@/lib/media/clustering';
 import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import Polaroid from '../polaroid/Polaroid';
 import OpenAlbum from './OpenAlbum';
 import UploadSheet from '../upload/UploadSheet';
 import LibraryView, { ViewModeToggle, type LibraryAlbum, type ViewMode } from './LibraryView';
+import MediaLightbox from '../media/MediaLightbox';
 import './background.css';
 
 const MIN_SCALE = 0.4;
@@ -322,21 +323,17 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   // the raw `items` array so every photo remains individually visible and a
   // user's persisted global position is never replaced by an album cover.
   const libraryAlbums = useMemo<LibraryAlbum[]>(
-    () =>
-      groupIntoAlbums(items).map((item) =>
-        item.kind === 'album'
-          ? item
-          : { id: `album-loose-${item.media.id}`, items: [item.media] }
-      ),
+    () => groupIntoLibraryAlbums(items),
     [items]
   );
   const [activeAlbumId, setActiveAlbumId] = useState<string | null>(null);
+  const [lightboxMedia, setLightboxMedia] = useState<MediaRow | null>(null);
   const activeAlbum = useMemo(() => {
     if (!activeAlbumId) return null;
     return libraryAlbums.find((album) => album.id === activeAlbumId) ?? null;
   }, [activeAlbumId, libraryAlbums]);
   const isAlbumOpen = activeAlbum !== null;
-  const isAlbumModalActive = isAlbumOpen;
+  const isAlbumModalActive = isAlbumOpen || lightboxMedia !== null;
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
@@ -605,6 +602,15 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
 
   const handleDelete = useCallback((id: string) => {
     setItems((current) => current.filter((item) => item.id !== id));
+    setLightboxMedia((current) => (current?.id === id ? null : current));
+  }, []);
+
+  const handleOpenMedia = useCallback((mediaItem: MediaRow) => {
+    setLightboxMedia(mediaItem);
+  }, []);
+
+  const handleCloseMedia = useCallback(() => {
+    setLightboxMedia(null);
   }, []);
 
   const handleBringToFront = useCallback(() => {
@@ -740,6 +746,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
                 onTransformChange={handleTransformChange}
                 onBringToFront={handleBringToFront}
                 onCaptionChange={handleCaptionChange}
+                onMediaOpen={handleOpenMedia}
                 canManage={currentUserId === mediaItem.user_id}
                 onMemoryTagChange={handleMemoryTagChange}
                 onDelete={handleDelete}
@@ -776,6 +783,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
           onMemoryTagChange={handleMemoryTagChange}
           onDelete={handleDelete}
         />
+      ) : null}
+
+      {lightboxMedia ? (
+        <MediaLightbox media={lightboxMedia} onClose={handleCloseMedia} />
       ) : null}
     </div>
   );

@@ -83,6 +83,10 @@ export type PolaroidProps = {
    * stack. Framer's tap recognizer cancels after a drag, so moving the
    * Polaroid never accidentally opens the album on pointer-up. */
   onActivate?: () => void;
+  /** Opens the original image/video without coupling media interaction to
+   * the Polaroid's drag surface. When omitted, videos retain the inline
+   * player fallback. */
+  onMediaOpen?: (media: MediaRow) => void;
   activationLabel?: string;
   layoutId?: string;
   canManage?: boolean;
@@ -97,6 +101,7 @@ export default function Polaroid({
   onBringToFront,
   onCaptionChange,
   onActivate,
+  onMediaOpen,
   activationLabel,
   layoutId,
   canManage = false,
@@ -305,11 +310,25 @@ export default function Polaroid({
       ) : null}
 
       <div className="polaroid-body">
+        {/* The image/video is deliberately outside the drag gesture. The
+            surrounding white paper remains the handle while native video
+            controls receive their complete, unmodified pointer sequence. */}
         <div
           className="polaroid-media"
           style={{ aspectRatio: `${geometry.mediaAspect}`, height: geometry.mediaHeight }}
-          onClick={() => {
-            if (onActivate) return;
+          onPointerDown={(event) => event.stopPropagation()}
+          onPointerUp={(event) => event.stopPropagation()}
+          onPointerCancel={(event) => event.stopPropagation()}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (onMediaOpen) {
+              onMediaOpen(media);
+              return;
+            }
+            if (onActivate) {
+              onActivate();
+              return;
+            }
             if (media.media_type === 'video' && !videoActive) setVideoActive(true);
           }}
         >
@@ -336,12 +355,16 @@ export default function Polaroid({
             <video
               src={videoSrc}
               autoPlay
-              loop
-              muted
+              controls
+              muted={false}
+              preload="metadata"
               // Required for iOS inline playback — without it iOS forces a
               // fullscreen takeover, which breaks the "plays inside the
               // frame" requirement. Easy to miss; do not remove.
               playsInline
+              onPointerDown={(event) => event.stopPropagation()}
+              onPointerUp={(event) => event.stopPropagation()}
+              onClick={(event) => event.stopPropagation()}
               style={{ opacity: 1, transition: 'opacity 200ms ease' }}
             />
           ) : null}

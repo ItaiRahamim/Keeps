@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">memokeeps open album icon</title>
+  <defs>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="2" dy="9" stdDeviation="7" flood-color="#1f332d" flood-opacity=".45"/></filter>
+    <linearGradient id="g" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#459483"/><stop offset="1" stop-color="#1f5c4f"/></linearGradient>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="#b8865b"/>
+  <g filter="url(#s)">
+    <rect x="26" y="53" width="204" height="158" rx="20" fill="url(#g)"/>
+    <path d="M43 68h75q10 0 12 13v112q-25-12-80 1-11 2-11-10V77q0-9 4-9Z" fill="#fffaf0"/>
+    <path d="M213 68h-75q-10 0-12 13v112q25-12 80 1 11 2 11-10V77q0-9-4-9Z" fill="#fffaf0"/>
+    <rect x="123" y="67" width="10" height="130" rx="5" fill="#74513a" opacity=".75"/>
+    <rect x="58" y="92" width="50" height="66" rx="3" fill="#fdfbf7" transform="rotate(-5 83 125)"/>
+    <rect x="65" y="101" width="36" height="41" fill="#d9a521" transform="rotate(-5 83 125)"/>
+    <rect x="148" y="92" width="50" height="66" rx="3" fill="#fdfbf7" transform="rotate(5 173 125)"/>
+    <rect x="155" y="101" width="36" height="41" fill="#2e7d6b" transform="rotate(5 173 125)"/>
+    <circle cx="82" cy="84" r="10" fill="#c6432b"/>
+    <circle cx="174" cy="84" r="10" fill="#d9a521"/>
+  </g>
+</svg>

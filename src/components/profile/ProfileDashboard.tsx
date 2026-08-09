@@ -2,9 +2,10 @@
 
 import Image from 'next/image';
 import Link from 'next/link';
-import { useActionState, useRef, useState } from 'react';
+import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Pushpin from '@/components/pushpin/Pushpin';
+import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
 import { signOut } from '@/lib/supabase/actions';
 import {
   updateProfileAvatar,
@@ -21,6 +22,7 @@ import type { UserProfile } from '@/lib/types';
 
 export type PersonalMemorySummary = {
   id: string;
+  albumId: string;
   title: string;
   albumName: string | null;
   imageUrl: string | null;
@@ -49,7 +51,14 @@ type AvatarStatus =
   | { kind: 'success'; message: string }
   | { kind: 'error'; message: string };
 
+type AvatarCropSelection = {
+  file: File;
+  previewUrl: string;
+};
+
 const initialNameState: ProfileNameActionState = { status: 'idle', message: '' };
+const MAX_AVATAR_SOURCE_BYTES = 20 * 1024 * 1024;
+const SUPPORTED_AVATAR_TYPES = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 function initialsFor(name: string): string {
   return name
@@ -70,6 +79,11 @@ function formattedDate(value: string): string {
     year: 'numeric',
     timeZone: 'UTC',
   }).format(date);
+}
+
+function albumHref(albumId: string, mediaId?: string): string {
+  const path = `/album/${encodeURIComponent(albumId)}`;
+  return mediaId ? `${path}?media=${encodeURIComponent(mediaId)}` : path;
 }
 
 function putAvatar(
@@ -109,22 +123,47 @@ export default function ProfileDashboard({
   const [avatarUrl, setAvatarUrl] = useState(profile.avatar_url);
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>({ kind: 'idle', message: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
+  const [avatarCrop, setAvatarCrop] = useState<AvatarCropSelection | null>(null);
   const [nameState, nameAction, namePending] = useActionState(updateProfileName, initialNameState);
   const displayName = nameState.status === 'success' ? nameState.displayName : profile.display_name;
   const isAvatarUploading = avatarStatus.kind === 'uploading';
 
-  async function handleAvatarSelection(event: React.ChangeEvent<HTMLInputElement>) {
+  useEffect(() => {
+    if (!avatarCrop) return;
+    const previewUrl = avatarCrop.previewUrl;
+    return () => URL.revokeObjectURL(previewUrl);
+  }, [avatarCrop]);
+
+  function handleAvatarSelection(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
     const file = input.files?.[0];
     if (!file) return;
 
+    if (
+      !SUPPORTED_AVATAR_TYPES.has(file.type) ||
+      file.size <= 0 ||
+      file.size > MAX_AVATAR_SOURCE_BYTES
+    ) {
+      setAvatarStatus({
+        kind: 'error',
+        message: `Choose a JPG, PNG, or WebP image smaller than ${MAX_AVATAR_SOURCE_BYTES / 1024 / 1024} MB.`,
+      });
+      input.value = '';
+      return;
+    }
+
+    setAvatarStatus({ kind: 'idle', message: '' });
+    setAvatarCrop({ file, previewUrl: URL.createObjectURL(file) });
+    input.value = '';
+  }
+
+  async function uploadCroppedAvatar(file: File) {
     const request = AvatarPresignRequest.safeParse({ contentType: file.type, size: file.size });
     if (!request.success) {
       setAvatarStatus({
         kind: 'error',
-        message: `Choose a JPG, PNG, or WebP image smaller than ${MAX_AVATAR_BYTES / 1024 / 1024} MB.`,
+        message: `The cropped photo must be smaller than ${MAX_AVATAR_BYTES / 1024 / 1024} MB.`,
       });
-      input.value = '';
       return;
     }
 
@@ -155,8 +194,6 @@ export default function ProfileDashboard({
         kind: 'error',
         message: error instanceof Error ? error.message : 'We could not update your profile photo.',
       });
-    } finally {
-      input.value = '';
     }
   }
 
@@ -206,13 +243,13 @@ export default function ProfileDashboard({
               className="profile-visually-hidden"
               type="file"
               accept="image/jpeg,image/png,image/webp"
-              disabled={isAvatarUploading}
+              disabled={isAvatarUploading || avatarCrop !== null}
               onChange={handleAvatarSelection}
             />
             <button
               type="button"
               className="profile-avatar-button"
-              disabled={isAvatarUploading}
+              disabled={isAvatarUploading || avatarCrop !== null}
               onClick={() => fileInputRef.current?.click()}
             >
               {isAvatarUploading ? `Uploading ${uploadProgress}%` : avatarUrl ? 'Change photo' : 'Add photo'}
@@ -285,9 +322,10 @@ export default function ProfileDashboard({
           {personalMemories.length > 0 ? (
             <div className="profile-memory-grid">
               {personalMemories.map((memory, index) => (
-                <article
+                <Link
                   className="profile-memory-card"
                   key={memory.id}
+                  href={albumHref(memory.albumId, memory.id)}
                   style={{ '--profile-tilt': `${((index % 5) - 2) * 0.55}deg` } as React.CSSProperties}
                 >
                   <div className="profile-memory-image">
@@ -306,7 +344,7 @@ export default function ProfileDashboard({
                     <h3 dir="auto">{memory.title}</h3>
                     <p>{memory.albumName ? `${memory.albumName} · ` : ''}{formattedDate(memory.timestamp)}</p>
                   </div>
-                </article>
+                </Link>
               ))}
             </div>
           ) : (
@@ -330,7 +368,11 @@ export default function ProfileDashboard({
           {participatedAlbums.length > 0 ? (
             <div className="profile-album-grid">
               {participatedAlbums.map((album) => (
-                <article className="profile-album-card" key={album.id}>
+                <Link
+                  className="profile-album-card"
+                  key={album.id}
+                  href={albumHref(album.id)}
+                >
                   <div className="profile-album-tab" aria-hidden="true" />
                   <div className="profile-album-preview" aria-hidden="true">
                     {album.previewUrls.map((url, index) => (
@@ -346,7 +388,7 @@ export default function ProfileDashboard({
                       {album.totalCount === 1 ? 'memory' : 'memories'}
                     </p>
                   </div>
-                </article>
+                </Link>
               ))}
             </div>
           ) : (
@@ -358,6 +400,18 @@ export default function ProfileDashboard({
           )}
         </section>
       </div>
+
+      {avatarCrop ? (
+        <AvatarCropDialog
+          file={avatarCrop.file}
+          previewUrl={avatarCrop.previewUrl}
+          onCancel={() => setAvatarCrop(null)}
+          onConfirm={async (croppedFile) => {
+            setAvatarCrop(null);
+            await uploadCroppedAvatar(croppedFile);
+          }}
+        />
+      ) : null}
     </main>
   );
 }

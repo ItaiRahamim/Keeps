@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280" role="img" aria-labelledby="title desc">
+  <title id="title">memokeeps pinned m logo</title>
+  <desc id="desc">A compact lowercase m drawn like a memory thread between colorful pushpins.</desc>
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="2" dy="8" stdDeviation="6" flood-color="#3a2f22" flood-opacity=".28"/></filter>
+    <pattern id="cork" width="40" height="40" patternUnits="userSpaceOnUse"><rect width="40" height="40" fill="#b8865b"/><path d="M3 13q7-5 13 0M21 30q7 3 13-2" fill="none" stroke="#70432b" stroke-width="1.1" opacity=".28"/><ellipse cx="31" cy="9" rx="2" ry=".7" fill="#e1b57f" opacity=".4"/></pattern>
+  </defs>
+  <rect width="960" height="280" fill="#fff"/>
+  <g filter="url(#shadow)">
+    <rect x="36" y="36" width="200" height="200" rx="60" fill="url(#cork)"/>
+    <path d="M77 180V105c0-16 26-16 26 0v45c0-43 56-44 56 2 0-45 55-44 55 1v27" fill="none" stroke="#fdfbf7" stroke-width="15" stroke-linecap="round" stroke-linejoin="round"/>
+    <path d="M77 180V105c0-16 26-16 26 0v45c0-43 56-44 56 2 0-45 55-44 55 1v27" fill="none" stroke="#3a2f22" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" opacity=".22"/>
+    <circle cx="90" cy="82" r="14" fill="#c6432b" stroke="#8d2d1e" stroke-width="2"/>
+    <circle cx="146" cy="130" r="13" fill="#d9a521" stroke="#9d7416" stroke-width="2"/>
+    <circle cx="201" cy="130" r="13" fill="#2e7d6b" stroke="#1d5549" stroke-width="2"/>
+    <circle cx="85" cy="77" r="4" fill="#fff" opacity=".45"/>
+    <circle cx="142" cy="126" r="3.5" fill="#fff" opacity=".4"/>
+    <circle cx="197" cy="126" r="3.5" fill="#fff" opacity=".4"/>
+  </g>
+  <text x="277" y="148" fill="#3a2f22" font-family="Arial Rounded MT Bold, Trebuchet MS, system-ui, sans-serif" font-size="82" font-weight="700" letter-spacing="-4">memokeeps</text>
+  <text x="281" y="198" fill="#c6432b" font-family="Trebuchet MS, system-ui, sans-serif" font-size="21" font-weight="600" letter-spacing="2.2">EVERY KEEP HAS A STORY</text>
+</svg>

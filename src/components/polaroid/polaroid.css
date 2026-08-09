@@ -58,6 +58,8 @@
   width: 100%;
   overflow: hidden;
   background: #111; /* letterbox tone while media loads */
+  cursor: zoom-in;
+  pointer-events: auto;
 }
 
 .polaroid-media img,
@@ -70,7 +72,10 @@
 }
 
 .polaroid-media video {
+  z-index: 2;
   border: none;
+  cursor: auto;
+  pointer-events: auto;
 }
 
 .polaroid-play-badge {

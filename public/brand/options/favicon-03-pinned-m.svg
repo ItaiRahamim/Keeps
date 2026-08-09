@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">memokeeps pinned m icon</title>
+  <defs>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="2" dy="8" stdDeviation="6" flood-color="#3a2f22" flood-opacity=".3"/></filter>
+    <pattern id="c" width="38" height="38" patternUnits="userSpaceOnUse"><rect width="38" height="38" fill="#b8865b"/><path d="M3 12q6-4 12 0M20 29q7 3 13-2" fill="none" stroke="#70432b" stroke-width="1.2" opacity=".3"/><circle cx="29" cy="8" r="1.2" fill="#e6bb83" opacity=".45"/></pattern>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#c)"/>
+  <g filter="url(#s)">
+    <path d="M48 190V92c0-23 39-23 39 0v65c0-60 74-61 74 2 0-62 71-61 71 1v30" fill="none" stroke="#fdfbf7" stroke-width="23" stroke-linecap="round" stroke-linejoin="round"/>
+    <circle cx="68" cy="63" r="21" fill="#c6432b" stroke="#8d2d1e" stroke-width="3"/>
+    <circle cx="142" cy="132" r="19" fill="#d9a521" stroke="#9d7416" stroke-width="3"/>
+    <circle cx="213" cy="132" r="19" fill="#2e7d6b" stroke="#1d5549" stroke-width="3"/>
+    <circle cx="61" cy="56" r="6" fill="#fff" opacity=".46"/>
+    <circle cx="136" cy="126" r="5" fill="#fff" opacity=".42"/>
+    <circle cx="207" cy="126" r="5" fill="#fff" opacity=".42"/>
+  </g>
+</svg>

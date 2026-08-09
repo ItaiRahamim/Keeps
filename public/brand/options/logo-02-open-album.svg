@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280" role="img" aria-labelledby="title desc">
+  <title id="title">memokeeps open album logo</title>
+  <desc id="desc">A physical open album with two photo pages beside the memokeeps wordmark.</desc>
+  <defs>
+    <filter id="shadow" x="-30%" y="-40%" width="160%" height="200%"><feDropShadow dx="2" dy="10" stdDeviation="7" flood-color="#3a2f22" flood-opacity=".32"/></filter>
+    <linearGradient id="cover" x1="0" y1="0" x2="1" y2="1"><stop stop-color="#459483"/><stop offset="1" stop-color="#1f5c4f"/></linearGradient>
+    <linearGradient id="pageL" x1="0" y1="0" x2="1" y2="0"><stop stop-color="#fffaf0"/><stop offset="1" stop-color="#dfd2b9"/></linearGradient>
+    <linearGradient id="pageR" x1="1" y1="0" x2="0" y2="0"><stop stop-color="#fffaf0"/><stop offset="1" stop-color="#dfd2b9"/></linearGradient>
+  </defs>
+  <rect width="960" height="280" fill="#fff"/>
+  <g filter="url(#shadow)">
+    <path d="M35 67q0-16 17-18h166q16 2 16 18v145q0 18-18 18H53q-18 0-18-18Z" fill="url(#cover)"/>
+    <path d="M49 62h79q8 0 9 10v139q-23-11-85 0-7 1-7-8V71q0-9 4-9Z" fill="url(#pageL)"/>
+    <path d="M221 62h-79q-8 0-9 10v139q23-11 85 0 7 1 7-8V71q0-9-4-9Z" fill="url(#pageR)"/>
+    <rect x="130" y="60" width="10" height="153" rx="5" fill="#74513a" opacity=".75"/>
+    <rect x="65" y="85" width="53" height="65" rx="2" fill="#fdfbf7" transform="rotate(-4 91 117)"/>
+    <rect x="72" y="93" width="39" height="42" fill="#d9a521" transform="rotate(-4 91 117)"/>
+    <path d="M75 130q15-19 32 1v6H74Z" fill="#c6432b" opacity=".88" transform="rotate(-4 91 117)"/>
+    <rect x="153" y="91" width="53" height="65" rx="2" fill="#fdfbf7" transform="rotate(4 179 123)"/>
+    <rect x="160" y="99" width="39" height="42" fill="#2e7d6b" transform="rotate(4 179 123)"/>
+    <circle cx="179" cy="116" r="10" fill="#e8dcc4" transform="rotate(4 179 123)"/>
+    <circle cx="91" cy="78" r="7" fill="#c6432b"/>
+    <circle cx="179" cy="84" r="7" fill="#d9a521"/>
+  </g>
+  <text x="275" y="148" fill="#3a2f22" font-family="Arial Rounded MT Bold, Trebuchet MS, system-ui, sans-serif" font-size="82" font-weight="700" letter-spacing="-4">memo<tspan fill="#2e7d6b">keeps</tspan></text>
+  <text x="281" y="198" fill="#8b6547" font-family="Trebuchet MS, system-ui, sans-serif" font-size="21" font-weight="600" letter-spacing="2.2">OPEN THE MOMENT AGAIN</text>
+</svg>
