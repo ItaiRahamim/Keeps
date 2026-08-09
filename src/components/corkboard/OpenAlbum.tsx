@@ -1005,7 +1005,7 @@ function OpenAlbumDialog({
 
         <div
           ref={bookRef}
-          className="open-album-book"
+          className="open-album-book max-md:[--album-mobile-logical-height:600px] max-md:[--album-mobile-logical-width:800px] max-md:origin-center"
           onPointerDown={(event) => {
             if (event.pointerType === 'mouse') return;
             swipeStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
