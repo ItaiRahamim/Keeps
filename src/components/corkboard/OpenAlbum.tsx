@@ -40,8 +40,10 @@ export type OpenAlbumProps = {
   onClose: () => void;
   onPlacementChange?: (mediaId: string, placement: AlbumPlacement) => void;
   currentUserId?: string | null;
+  onCaptionChange?: (id: string, caption: string) => void;
   onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
   onDelete?: (id: string) => void;
+  onMediaOpen?: (media: MediaRow) => void;
   initialPage?: number;
 };
 
@@ -389,8 +391,10 @@ type AlbumMemoryCardProps = {
   onActiveChange: (id: string | null) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
   canManage: boolean;
+  onCaptionChange?: (id: string, caption: string) => void;
   onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
   onDelete?: (id: string) => void;
+  onMediaOpen?: (media: MediaRow) => void;
 };
 
 function AlbumMemoryCard({
@@ -404,14 +408,18 @@ function AlbumMemoryCard({
   onActiveChange,
   onCommit,
   canManage,
+  onCaptionChange,
   onMemoryTagChange,
   onDelete,
+  onMediaOpen,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
+  const [videoActive, setVideoActive] = useState(false);
   const { media, mediaIndex, placement } = entry;
   const caption = captionFor(media, mediaIndex);
   const source = media.thumbnail_url ?? (media.media_type === 'image' ? media.original_url : null);
+  const videoSource = media.media_type === 'video' ? resolveMediaUrl(media.original_url) : null;
   const frame = useMemo(
     () => getPolaroidGeometry(media.width, media.height),
     [media.width, media.height]
@@ -612,16 +620,47 @@ function AlbumMemoryCard({
         nudge(delta.x, delta.y);
       }}
     >
-      {!decorative && canManage && onMemoryTagChange && onDelete ? (
+      {!decorative ? (
         <MediaOwnerMenu
-          mediaId={media.id}
-          memoryTag={media.memory_tag}
-          onMoved={onMemoryTagChange}
-          onDeleted={onDelete}
+          media={media}
+          canManage={canManage}
+          onDetailsChanged={
+            canManage && onCaptionChange && onMemoryTagChange
+              ? (id, patch) => {
+                  onCaptionChange(id, patch.caption);
+                  onMemoryTagChange(id, patch.memoryTag);
+                }
+              : undefined
+          }
+          onDeleted={canManage ? onDelete : undefined}
+          onViewFullscreen={onMediaOpen}
         />
       ) : null}
-      <div className="open-album-memory-photo">
-        {source ? (
+      <div
+        className="open-album-memory-photo"
+        data-media-type={media.media_type}
+        onPointerDown={(event) => event.stopPropagation()}
+        onPointerUp={(event) => event.stopPropagation()}
+        onPointerCancel={(event) => event.stopPropagation()}
+        onClick={(event) => {
+          event.stopPropagation();
+          if (media.media_type === 'video' && !videoActive) setVideoActive(true);
+        }}
+      >
+        {videoSource && videoActive ? (
+          <video
+            src={videoSource}
+            autoPlay
+            controls
+            muted={false}
+            preload="metadata"
+            playsInline
+            aria-label={caption}
+            onPointerDown={(event) => event.stopPropagation()}
+            onPointerUp={(event) => event.stopPropagation()}
+            onClick={(event) => event.stopPropagation()}
+          />
+        ) : source ? (
           <Image
             src={resolveMediaUrl(source)}
             alt={decorative ? '' : caption}
@@ -638,7 +677,7 @@ function AlbumMemoryCard({
             <path d="m10 34 9-9 6.5 6 5-5L39 34" fill="none" stroke="currentColor" strokeWidth="2" />
           </svg>
         )}
-        {media.media_type === 'video' ? (
+        {media.media_type === 'video' && !videoActive ? (
           <span className="open-album-video-mark" aria-label="Video">
             <svg viewBox="0 0 24 24" aria-hidden="true">
               <path d="m9 7 8 5-8 5V7Z" fill="currentColor" />
@@ -659,8 +698,10 @@ type AlbumPageProps = {
   decorative?: boolean;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
   currentUserId?: string | null;
+  onCaptionChange?: (id: string, caption: string) => void;
   onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
   onDelete?: (id: string) => void;
+  onMediaOpen?: (media: MediaRow) => void;
 };
 
 function AlbumPage({
@@ -670,8 +711,10 @@ function AlbumPage({
   decorative = false,
   onCommit,
   currentUserId,
+  onCaptionChange,
   onMemoryTagChange,
   onDelete,
+  onMediaOpen,
 }: AlbumPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -699,8 +742,10 @@ function AlbumPage({
           onActiveChange={setActiveId}
           onCommit={onCommit}
           canManage={currentUserId === entry.media.user_id}
+          onCaptionChange={onCaptionChange}
           onMemoryTagChange={onMemoryTagChange}
           onDelete={onDelete}
+          onMediaOpen={onMediaOpen}
         />
       ))}
       {leaf ? <span className="open-album-page-number" aria-hidden="true">{pageIndex + 1}</span> : null}
@@ -713,8 +758,10 @@ function OpenAlbumDialog({
   onClose,
   onPlacementChange,
   currentUserId,
+  onCaptionChange,
   onMemoryTagChange,
   onDelete,
+  onMediaOpen,
   initialPage = 0,
 }: OpenAlbumProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -1050,8 +1097,10 @@ function OpenAlbumDialog({
                 decorative={Boolean(turn)}
                 onCommit={commitPlacement}
                 currentUserId={currentUserId}
+                onCaptionChange={onCaptionChange}
                 onMemoryTagChange={onMemoryTagChange}
                 onDelete={onDelete}
+                onMediaOpen={onMediaOpen}
               />
             </div>
             <div className="open-album-static-page open-album-static-page-right">
@@ -1062,8 +1111,10 @@ function OpenAlbumDialog({
                 decorative={Boolean(turn)}
                 onCommit={commitPlacement}
                 currentUserId={currentUserId}
+                onCaptionChange={onCaptionChange}
                 onMemoryTagChange={onMemoryTagChange}
                 onDelete={onDelete}
+                onMediaOpen={onMediaOpen}
               />
             </div>
           </div>

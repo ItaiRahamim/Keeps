@@ -99,12 +99,9 @@ export default async function ProfilePage() {
     .filter((item) => item.user_id === user.id)
     .sort((a, b) => timestampFor(b).localeCompare(timestampFor(a)))
     .map((item) => ({
-      id: item.id,
       albumId: albumIdByMediaId.get(item.id) ?? `album-loose-${item.id}`,
-      title: item.caption?.trim() || item.memory_tag?.trim() || 'Untitled memory',
-      albumName: item.memory_tag?.trim() || null,
+      media: item,
       imageUrl: memoryImage(item),
-      mediaType: item.media_type,
       timestamp: timestampFor(item),
     }));
 

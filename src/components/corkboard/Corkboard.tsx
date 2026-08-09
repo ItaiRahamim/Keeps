@@ -780,8 +780,10 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
           onClose={handleCloseAlbum}
           onPlacementChange={handleAlbumPlacementChange}
           currentUserId={currentUserId}
+          onCaptionChange={handleCaptionChange}
           onMemoryTagChange={handleMemoryTagChange}
           onDelete={handleDelete}
+          onMediaOpen={handleOpenMedia}
         />
       ) : null}
 

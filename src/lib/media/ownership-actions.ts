@@ -18,6 +18,10 @@ export type MoveOwnedMediaResult =
   | { ok: true; id: string; memoryTag: string | null }
   | { ok: false; code: OwnershipFailureCode; message: string };
 
+export type EditOwnedMediaDetailsResult =
+  | { ok: true; id: string; caption: string; memoryTag: string | null }
+  | { ok: false; code: OwnershipFailureCode; message: string };
+
 export type DeleteOwnedMediaResult =
   | { ok: true; id: string }
   | { ok: false; code: OwnershipFailureCode; message: string };
@@ -35,6 +39,93 @@ function normalizedTicketName(value: unknown): string | null | undefined {
     : '';
   if (name.length > 80) return undefined;
   return name || null;
+}
+
+function normalizedCaption(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const caption = value.normalize('NFKC').trim().replace(/\s+/g, ' ');
+  return caption.length <= 280 ? caption : undefined;
+}
+
+export async function updateOwnedMediaDetails(
+  mediaIdInput: unknown,
+  detailsInput: unknown
+): Promise<EditOwnedMediaDetailsResult> {
+  const mediaId = normalizedUuid(mediaIdInput);
+  if (typeof detailsInput !== 'object' || detailsInput === null || Array.isArray(detailsInput)) {
+    return { ok: false, code: 'INVALID_INPUT', message: 'Enter valid memory details.' };
+  }
+
+  const details = detailsInput as Record<string, unknown>;
+  const caption = normalizedCaption(details.caption);
+  const memoryTag = normalizedTicketName(details.memoryTag);
+  if (!mediaId || caption === undefined || memoryTag === undefined) {
+    return {
+      ok: false,
+      code: 'INVALID_INPUT',
+      message: 'Use a caption of 280 characters or fewer and an album name of 80 characters or fewer.',
+    };
+  }
+
+  const supabase = await createClient();
+  const {
+    data: { user },
+    error: authError,
+  } = await supabase.auth.getUser();
+  if (authError || !user) {
+    return { ok: false, code: 'UNAUTHENTICATED', message: 'Sign in again to edit this memory.' };
+  }
+
+  const { data, error } = await supabase
+    .from('media')
+    .update({ caption, memory_tag: memoryTag })
+    .eq('id', mediaId)
+    .eq('user_id', user.id)
+    .select('id, caption, memory_tag')
+    .maybeSingle();
+  if (error) {
+    console.error('updateOwnedMediaDetails Supabase error', error);
+    return {
+      ok: false,
+      code: 'DATABASE_ERROR',
+      message: `Could not update this memory: ${error.message}`,
+    };
+  }
+  if (!data) {
+    return {
+      ok: false,
+      code: 'FORBIDDEN_OR_NOT_FOUND',
+      message: 'Only the uploader can edit this memory.',
+    };
+  }
+  if (
+    data.id !== mediaId ||
+    data.caption !== caption ||
+    data.memory_tag !== memoryTag
+  ) {
+    console.error('updateOwnedMediaDetails verification failed', {
+      requested: { id: mediaId, caption, memoryTag },
+      returned: data,
+    });
+    return {
+      ok: false,
+      code: 'DATABASE_ERROR',
+      message: 'The database did not confirm the complete memory update.',
+    };
+  }
+
+  try {
+    revalidatePath('/');
+    revalidatePath('/profile');
+  } catch (revalidationError) {
+    console.error('updateOwnedMediaDetails revalidation error after verified save', revalidationError);
+  }
+  return {
+    ok: true,
+    id: data.id,
+    caption: data.caption,
+    memoryTag: data.memory_tag,
+  };
 }
 
 function objectKeyFromStoredUrl(value: string, userId: string): string | null {

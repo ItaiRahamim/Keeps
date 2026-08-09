@@ -1,74 +1,135 @@
 'use client';
 
 import { useEffect, useRef, useState, useTransition } from 'react';
-import { deleteOwnedMedia, moveOwnedMedia } from '@/lib/media/ownership-actions';
+import { getMediaUrl } from '@/lib/contracts';
+import { downloadMediaFile } from '@/lib/media/download';
+import {
+  deleteOwnedMedia,
+  updateOwnedMediaDetails,
+} from '@/lib/media/ownership-actions';
+import type { MediaRow } from '@/lib/types';
 import './media-owner-menu.css';
 
-type MediaOwnerMenuProps = {
-  mediaId: string;
+export type MediaDetailsPatch = {
+  caption: string;
   memoryTag: string | null;
-  onMoved: (id: string, memoryTag: string | null) => void;
-  onDeleted: (id: string) => void;
+};
+
+export type MediaOwnerMenuProps = {
+  media: MediaRow;
+  canManage: boolean;
+  onDetailsChanged?: (id: string, patch: MediaDetailsPatch) => void;
+  onDeleted?: (id: string) => void;
+  onViewFullscreen?: (media: MediaRow) => void;
 };
 
 function shieldEvent(event: React.SyntheticEvent) {
   event.stopPropagation();
 }
 
+function resolveMediaUrl(value: string): string {
+  return /^https?:\/\//i.test(value) ? value : getMediaUrl(value);
+}
+
 export default function MediaOwnerMenu({
-  mediaId,
-  memoryTag,
-  onMoved,
+  media,
+  canManage,
+  onDetailsChanged,
   onDeleted,
+  onViewFullscreen,
 }: MediaOwnerMenuProps) {
   const rootRef = useRef<HTMLDivElement | null>(null);
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const [isOpen, setIsOpen] = useState(false);
-  const [mode, setMode] = useState<'menu' | 'move' | 'delete'>('menu');
-  const [draft, setDraft] = useState(memoryTag ?? '');
+  const [mode, setMode] = useState<'menu' | 'edit' | 'delete'>('menu');
+  const [captionDraft, setCaptionDraft] = useState(media.caption ?? '');
+  const [albumDraft, setAlbumDraft] = useState(media.memory_tag ?? '');
   const [error, setError] = useState<string | null>(null);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
     if (!isOpen) return;
     const closeOnOutsidePointer = (event: PointerEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setIsOpen(false);
+      if (isPending) return;
+      if (!rootRef.current?.contains(event.target as Node)) {
+        setIsOpen(false);
+        setMode('menu');
+        setError(null);
+      }
+    };
+    const closeOnEscape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape' || isPending) return;
+      setIsOpen(false);
+      setMode('menu');
+      setError(null);
+      triggerRef.current?.focus();
     };
     document.addEventListener('pointerdown', closeOnOutsidePointer);
-    return () => document.removeEventListener('pointerdown', closeOnOutsidePointer);
-  }, [isOpen]);
+    window.addEventListener('keydown', closeOnEscape);
+    return () => {
+      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      window.removeEventListener('keydown', closeOnEscape);
+    };
+  }, [isOpen, isPending]);
 
-  function close() {
+  function dismiss({ restoreFocus = false } = {}) {
     if (isPending) return;
     setIsOpen(false);
     setMode('menu');
     setError(null);
+    if (restoreFocus) requestAnimationFrame(() => triggerRef.current?.focus());
   }
 
-  function submitMove() {
-    if (isPending) return;
+  function submitDetails() {
+    if (isPending || !canManage || !onDetailsChanged) return;
     setError(null);
     startTransition(async () => {
-      const result = await moveOwnedMedia(mediaId, draft);
+      const result = await updateOwnedMediaDetails(media.id, {
+        caption: captionDraft,
+        memoryTag: albumDraft,
+      });
       if (!result.ok) {
         setError(result.message);
         return;
       }
-      onMoved(result.id, result.memoryTag);
-      close();
+      onDetailsChanged(result.id, {
+        caption: result.caption,
+        memoryTag: result.memoryTag,
+      });
+      setIsOpen(false);
+      setMode('menu');
+      setError(null);
     });
   }
 
   function submitDelete() {
-    if (isPending) return;
+    if (isPending || !canManage || !onDeleted) return;
     setError(null);
     startTransition(async () => {
-      const result = await deleteOwnedMedia(mediaId);
+      const result = await deleteOwnedMedia(media.id);
       if (!result.ok) {
         setError(result.message);
         return;
       }
       onDeleted(result.id);
     });
+  }
+
+  async function handleDownload() {
+    if (isDownloading) return;
+    setIsDownloading(true);
+    setError(null);
+    try {
+      await downloadMediaFile(
+        resolveMediaUrl(media.original_url),
+        media.caption?.trim() || media.memory_tag?.trim() || 'memokeep'
+      );
+    } catch (downloadError) {
+      setError(downloadError instanceof Error ? downloadError.message : 'Download failed.');
+    } finally {
+      setIsDownloading(false);
+    }
   }
 
   return (
@@ -78,18 +139,21 @@ export default function MediaOwnerMenu({
       data-open={isOpen ? 'true' : undefined}
       onPointerDown={shieldEvent}
       onPointerUp={shieldEvent}
+      onPointerCancel={shieldEvent}
       onClick={shieldEvent}
       onDoubleClick={shieldEvent}
     >
       <button
+        ref={triggerRef}
         type="button"
         className="media-owner-menu-trigger"
-        aria-label="Manage this memory"
+        aria-label="Memory options"
         aria-expanded={isOpen}
         onClick={() => {
           setIsOpen((open) => !open);
           setMode('menu');
-          setDraft(memoryTag ?? '');
+          setCaptionDraft(media.caption ?? '');
+          setAlbumDraft(media.memory_tag ?? '');
           setError(null);
         }}
       >
@@ -97,33 +161,59 @@ export default function MediaOwnerMenu({
       </button>
 
       {isOpen ? (
-        <div className="media-owner-menu-popover" role="dialog" aria-label="Manage memory">
+        <div className="media-owner-menu-popover" role="dialog" aria-label="Memory options">
           {mode === 'menu' ? (
             <>
-              <button type="button" onClick={() => setMode('move')}>Move to album</button>
-              <button type="button" className="danger" onClick={() => setMode('delete')}>Delete memory</button>
+              {canManage && onDetailsChanged ? (
+                <button type="button" onClick={() => setMode('edit')}>Edit details</button>
+              ) : null}
+              {onViewFullscreen ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    dismiss();
+                    onViewFullscreen(media);
+                  }}
+                >
+                  View fullscreen
+                </button>
+              ) : null}
+              <button type="button" onClick={() => void handleDownload()} disabled={isDownloading}>
+                {isDownloading ? 'Downloading…' : 'Download'}
+              </button>
+              {canManage && onDeleted ? (
+                <button type="button" className="danger" onClick={() => setMode('delete')}>Delete memory</button>
+              ) : null}
             </>
           ) : null}
 
-          {mode === 'move' ? (
+          {mode === 'edit' ? (
             <form
               onSubmit={(event) => {
                 event.preventDefault();
-                submitMove();
+                submitDetails();
               }}
             >
-              <label htmlFor={`move-memory-${mediaId}`}>Album name</label>
+              <label htmlFor={`edit-caption-${media.id}`}>Caption</label>
               <input
-                id={`move-memory-${mediaId}`}
+                id={`edit-caption-${media.id}`}
                 autoFocus
+                maxLength={280}
+                value={captionDraft}
+                onChange={(event) => setCaptionDraft(event.target.value)}
+                disabled={isPending}
+              />
+              <label htmlFor={`edit-album-${media.id}`}>Album name</label>
+              <input
+                id={`edit-album-${media.id}`}
                 maxLength={80}
-                value={draft}
-                onChange={(event) => setDraft(event.target.value)}
+                value={albumDraft}
+                onChange={(event) => setAlbumDraft(event.target.value)}
                 disabled={isPending}
               />
               <div className="media-owner-menu-actions">
                 <button type="button" onClick={() => setMode('menu')} disabled={isPending}>Back</button>
-                <button type="submit" disabled={isPending}>{isPending ? 'Moving…' : 'Move'}</button>
+                <button type="submit" disabled={isPending}>{isPending ? 'Saving…' : 'Save'}</button>
               </div>
             </form>
           ) : null}
@@ -141,7 +231,14 @@ export default function MediaOwnerMenu({
           ) : null}
 
           {error ? <p className="media-owner-menu-error" role="alert">{error}</p> : null}
-          <button type="button" className="media-owner-menu-close" onClick={close} aria-label="Close menu">×</button>
+          <button
+            type="button"
+            className="media-owner-menu-close"
+            onClick={() => dismiss({ restoreFocus: true })}
+            aria-label="Close menu"
+          >
+            ×
+          </button>
         </div>
       ) : null}
     </div>

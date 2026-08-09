@@ -58,8 +58,12 @@
   width: 100%;
   overflow: hidden;
   background: #111; /* letterbox tone while media loads */
-  cursor: zoom-in;
+  cursor: default;
   pointer-events: auto;
+}
+
+.polaroid-media[data-media-type='video'] {
+  cursor: pointer;
 }
 
 .polaroid-media img,

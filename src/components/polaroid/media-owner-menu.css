@@ -42,7 +42,7 @@
   position: absolute;
   top: calc(100% + 6px);
   right: 0;
-  width: 13rem;
+  width: 15rem;
   padding: 0.75rem;
   border: 1px solid rgba(88, 62, 44, 0.18);
   border-radius: 0.8rem;
@@ -67,6 +67,11 @@
   background: rgba(224, 193, 140, 0.22);
 }
 
+.media-owner-menu-popover > button:disabled {
+  cursor: wait;
+  opacity: 0.58;
+}
+
 .media-owner-menu .danger {
   color: #9c342e;
 }
@@ -88,6 +93,10 @@
   border-radius: 0.55rem;
   background: white;
   color: inherit;
+}
+
+.media-owner-menu-popover input + label {
+  margin-top: 0.65rem;
 }
 
 .media-owner-menu-actions {

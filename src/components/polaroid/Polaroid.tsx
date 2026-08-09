@@ -300,14 +300,20 @@ export default function Polaroid({
     >
       <Pushpin color={pinColor} position={pinPosition} hovered={playWiggle} />
 
-      {canManage && onMemoryTagChange && onDelete ? (
-        <MediaOwnerMenu
-          mediaId={media.id}
-          memoryTag={media.memory_tag}
-          onMoved={onMemoryTagChange}
-          onDeleted={onDelete}
-        />
-      ) : null}
+      <MediaOwnerMenu
+        media={media}
+        canManage={canManage}
+        onDetailsChanged={
+          canManage && onCaptionChange && onMemoryTagChange
+            ? (id, patch) => {
+                onCaptionChange(id, patch.caption);
+                onMemoryTagChange(id, patch.memoryTag);
+              }
+            : undefined
+        }
+        onDeleted={canManage ? onDelete : undefined}
+        onViewFullscreen={onMediaOpen}
+      />
 
       <div className="polaroid-body">
         {/* The image/video is deliberately outside the drag gesture. The
@@ -315,21 +321,20 @@ export default function Polaroid({
             controls receive their complete, unmodified pointer sequence. */}
         <div
           className="polaroid-media"
+          data-media-type={media.media_type}
           style={{ aspectRatio: `${geometry.mediaAspect}`, height: geometry.mediaHeight }}
           onPointerDown={(event) => event.stopPropagation()}
           onPointerUp={(event) => event.stopPropagation()}
           onPointerCancel={(event) => event.stopPropagation()}
           onClick={(event) => {
             event.stopPropagation();
-            if (onMediaOpen) {
-              onMediaOpen(media);
+            if (media.media_type === 'video' && !videoActive) {
+              setVideoActive(true);
               return;
             }
             if (onActivate) {
               onActivate();
-              return;
             }
-            if (media.media_type === 'video' && !videoActive) setVideoActive(true);
           }}
         >
           {thumbSrc ? (

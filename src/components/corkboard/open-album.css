@@ -521,11 +521,29 @@
   background: #d9d2c6;
 }
 
-.open-album-memory-photo img {
+.open-album-memory-photo[data-media-type='video'] {
+  cursor: pointer;
+}
+
+.open-album-memory-photo img,
+.open-album-memory-photo video {
   /* Album pages show the complete memory; letterboxing is preferable to
      silently cropping landscape edges or tall portrait details. */
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
+}
+
+.open-album-memory-photo img {
   pointer-events: none;
+}
+
+.open-album-memory-photo video {
+  z-index: 2;
+  background: #111;
+  pointer-events: auto;
 }
 
 .open-album-photo-placeholder {

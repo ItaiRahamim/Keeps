@@ -4,6 +4,8 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import MediaLightbox from '@/components/media/MediaLightbox';
+import MediaOwnerMenu from '@/components/polaroid/MediaOwnerMenu';
 import Pushpin from '@/components/pushpin/Pushpin';
 import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
 import { signOut } from '@/lib/supabase/actions';
@@ -18,15 +20,12 @@ import {
   MAX_AVATAR_BYTES,
   type AvatarPresignResponseT,
 } from '@/lib/profile/contracts';
-import type { UserProfile } from '@/lib/types';
+import type { MediaRow, UserProfile } from '@/lib/types';
 
 export type PersonalMemorySummary = {
-  id: string;
   albumId: string;
-  title: string;
-  albumName: string | null;
+  media: MediaRow;
   imageUrl: string | null;
-  mediaType: 'image' | 'video';
   timestamp: string;
 };
 
@@ -86,6 +85,10 @@ function albumHref(albumId: string, mediaId?: string): string {
   return mediaId ? `${path}?media=${encodeURIComponent(mediaId)}` : path;
 }
 
+function memoryTitle(media: MediaRow): string {
+  return media.caption?.trim() || media.memory_tag?.trim() || 'Untitled memory';
+}
+
 function putAvatar(
   upload: AvatarPresignResponseT,
   file: File,
@@ -124,6 +127,11 @@ export default function ProfileDashboard({
   const [avatarStatus, setAvatarStatus] = useState<AvatarStatus>({ kind: 'idle', message: '' });
   const [uploadProgress, setUploadProgress] = useState(0);
   const [avatarCrop, setAvatarCrop] = useState<AvatarCropSelection | null>(null);
+  const [memoryPatches, setMemoryPatches] = useState<
+    Record<string, { caption: string; memoryTag: string | null }>
+  >({});
+  const [deletedMemoryIds, setDeletedMemoryIds] = useState<Set<string>>(() => new Set());
+  const [lightboxMedia, setLightboxMedia] = useState<MediaRow | null>(null);
   const [nameState, nameAction, namePending] = useActionState(updateProfileName, initialNameState);
   const displayName = nameState.status === 'success' ? nameState.displayName : profile.display_name;
   const isAvatarUploading = avatarStatus.kind === 'uploading';
@@ -133,6 +141,22 @@ export default function ProfileDashboard({
     const previewUrl = avatarCrop.previewUrl;
     return () => URL.revokeObjectURL(previewUrl);
   }, [avatarCrop]);
+
+  const memories = personalMemories
+    .filter((memory) => !deletedMemoryIds.has(memory.media.id))
+    .map((memory) => {
+      const patch = memoryPatches[memory.media.id];
+      return patch
+        ? {
+            ...memory,
+            media: {
+              ...memory.media,
+              caption: patch.caption,
+              memory_tag: patch.memoryTag,
+            },
+          }
+        : memory;
+    });
 
   function handleAvatarSelection(event: React.ChangeEvent<HTMLInputElement>) {
     const input = event.currentTarget;
@@ -195,6 +219,25 @@ export default function ProfileDashboard({
         message: error instanceof Error ? error.message : 'We could not update your profile photo.',
       });
     }
+  }
+
+  function handleMemoryDetailsChanged(
+    id: string,
+    patch: { caption: string; memoryTag: string | null }
+  ) {
+    setMemoryPatches((current) => ({ ...current, [id]: patch }));
+    setLightboxMedia((current) =>
+      current?.id === id
+        ? { ...current, caption: patch.caption, memory_tag: patch.memoryTag }
+        : current
+    );
+    router.refresh();
+  }
+
+  function handleMemoryDeleted(id: string) {
+    setDeletedMemoryIds((current) => new Set(current).add(id));
+    setLightboxMedia((current) => (current?.id === id ? null : current));
+    router.refresh();
   }
 
   return (
@@ -301,7 +344,7 @@ export default function ProfileDashboard({
           <dl className="profile-stats" aria-label="Your memory statistics">
             <div>
               <dt>Memories</dt>
-              <dd>{personalMemories.length}</dd>
+              <dd>{memories.length}</dd>
             </div>
             <div>
               <dt>Albums joined</dt>
@@ -316,36 +359,48 @@ export default function ProfileDashboard({
               <p className="profile-eyebrow">Pinned by you</p>
               <h2 id="personal-memories-heading">Personal memories</h2>
             </div>
-            <span>{personalMemories.length}</span>
+            <span>{memories.length}</span>
           </div>
 
-          {personalMemories.length > 0 ? (
+          {memories.length > 0 ? (
             <div className="profile-memory-grid">
-              {personalMemories.map((memory, index) => (
-                <Link
-                  className="profile-memory-card"
-                  key={memory.id}
-                  href={albumHref(memory.albumId, memory.id)}
-                  style={{ '--profile-tilt': `${((index % 5) - 2) * 0.55}deg` } as React.CSSProperties}
-                >
-                  <div className="profile-memory-image">
-                    {memory.imageUrl ? (
-                      <Image src={memory.imageUrl} alt="" fill sizes="(max-width: 640px) 45vw, 210px" />
-                    ) : (
-                      <span>{memory.mediaType === 'video' ? 'Video' : 'Photo'}</span>
-                    )}
-                    {memory.mediaType === 'video' ? (
-                      <span className="profile-video-badge" aria-label="Video memory">
-                        ▶
-                      </span>
-                    ) : null}
+              {memories.map((memory, index) => {
+                const title = memoryTitle(memory.media);
+                const albumName = memory.media.memory_tag?.trim() || null;
+                return (
+                  <div className="profile-memory-card-shell" key={memory.media.id}>
+                    <Link
+                      className="profile-memory-card"
+                      href={albumHref(memory.albumId, memory.media.id)}
+                      style={{ '--profile-tilt': `${((index % 5) - 2) * 0.55}deg` } as React.CSSProperties}
+                    >
+                      <div className="profile-memory-image">
+                        {memory.imageUrl ? (
+                          <Image src={memory.imageUrl} alt="" fill sizes="(max-width: 640px) 45vw, 210px" />
+                        ) : (
+                          <span>{memory.media.media_type === 'video' ? 'Video' : 'Photo'}</span>
+                        )}
+                        {memory.media.media_type === 'video' ? (
+                          <span className="profile-video-badge" aria-label="Video memory">
+                            ▶
+                          </span>
+                        ) : null}
+                      </div>
+                      <div className="profile-memory-caption">
+                        <h3 dir="auto">{title}</h3>
+                        <p>{albumName ? `${albumName} · ` : ''}{formattedDate(memory.timestamp)}</p>
+                      </div>
+                    </Link>
+                    <MediaOwnerMenu
+                      media={memory.media}
+                      canManage
+                      onDetailsChanged={handleMemoryDetailsChanged}
+                      onDeleted={handleMemoryDeleted}
+                      onViewFullscreen={setLightboxMedia}
+                    />
                   </div>
-                  <div className="profile-memory-caption">
-                    <h3 dir="auto">{memory.title}</h3>
-                    <p>{memory.albumName ? `${memory.albumName} · ` : ''}{formattedDate(memory.timestamp)}</p>
-                  </div>
-                </Link>
-              ))}
+                );
+              })}
             </div>
           ) : (
             <div className="profile-empty-note">
@@ -411,6 +466,10 @@ export default function ProfileDashboard({
             await uploadCroppedAvatar(croppedFile);
           }}
         />
+      ) : null}
+
+      {lightboxMedia ? (
+        <MediaLightbox media={lightboxMedia} onClose={() => setLightboxMedia(null)} />
       ) : null}
     </main>
   );

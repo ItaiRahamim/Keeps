@@ -524,7 +524,14 @@
   gap: clamp(0.9rem, 2.4vw, 1.6rem);
 }
 
+.profile-memory-card-shell {
+  position: relative;
+  min-width: 0;
+}
+
 .profile-memory-card {
+  position: relative;
+  display: block;
   min-width: 0;
   padding: 0.55rem 0.55rem 0.8rem;
   background: var(--color-polaroid);
