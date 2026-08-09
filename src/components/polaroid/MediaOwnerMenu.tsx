@@ -65,10 +65,10 @@ export default function MediaOwnerMenu({
       setError(null);
       triggerRef.current?.focus();
     };
-    document.addEventListener('pointerdown', closeOnOutsidePointer);
+    document.addEventListener('pointerdown', closeOnOutsidePointer, true);
     window.addEventListener('keydown', closeOnEscape);
     return () => {
-      document.removeEventListener('pointerdown', closeOnOutsidePointer);
+      document.removeEventListener('pointerdown', closeOnOutsidePointer, true);
       window.removeEventListener('keydown', closeOnEscape);
     };
   }, [isOpen, isPending]);

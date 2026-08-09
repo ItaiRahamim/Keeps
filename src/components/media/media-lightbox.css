@@ -13,6 +13,7 @@
   touch-action: manipulation;
   user-select: none;
   -webkit-user-select: none;
+  pointer-events: auto;
 }
 
 .media-lightbox__topbar {
@@ -53,6 +54,8 @@
   background: #fdfbf7;
   box-shadow: 0 5px 18px rgb(0 0 0 / 24%);
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .media-lightbox__close {
@@ -95,6 +98,8 @@
   background: #050505;
   box-shadow: 0 16px 54px rgb(0 0 0 / 42%);
   object-fit: contain;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .media-lightbox__image {

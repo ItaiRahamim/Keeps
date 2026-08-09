@@ -4,8 +4,8 @@
   top: 16px;
   right: 16px;
   font-family: var(--font-ui);
-  pointer-events: auto;
-  touch-action: manipulation;
+  pointer-events: none;
+  touch-action: auto;
 }
 
 .media-owner-menu button,
@@ -24,6 +24,8 @@
   color: #49382e;
   box-shadow: 0 2px 8px rgba(45, 30, 21, 0.2);
   cursor: pointer;
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .media-owner-menu-trigger span {
@@ -49,6 +51,8 @@
   background: #fffaf0;
   color: #49382e;
   box-shadow: 0 12px 32px rgba(45, 30, 21, 0.3);
+  pointer-events: auto;
+  touch-action: manipulation;
 }
 
 .media-owner-menu-popover > button:not(.media-owner-menu-close) {

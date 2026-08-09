@@ -1,6 +1,12 @@
 'use client';
 
-import { useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type PointerEvent as ReactPointerEvent,
+} from 'react';
 import Image from 'next/image';
 import { motion, useMotionValue, useReducedMotion } from 'framer-motion';
 import type { MediaRow } from '@/lib/types';
@@ -53,15 +59,6 @@ function readBoardScale(source: BoardScaleSource): number {
 function resolveMediaUrl(value: string): string {
   if (/^https?:\/\//i.test(value)) return value;
   return getMediaUrl(value);
-}
-
-function isPolaroidInteractiveTarget(target: EventTarget | null): boolean {
-  return (
-    target instanceof Element &&
-    target.closest(
-      '.polaroid-chin[data-polaroid-interactive="true"], input, textarea, select, button, label, a[href], video[controls], [contenteditable="true"]'
-    ) !== null
-  );
 }
 
 export type PolaroidProps = {
@@ -121,6 +118,7 @@ export default function Polaroid({
   // matching left/top state, which made a card visibly jump or fly away.
   const x = useMotionValue(media.pos_x);
   const y = useMotionValue(media.pos_y);
+  const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
 
   // Keep server/realtime/optimistic updates reflected when this card is not
@@ -199,8 +197,32 @@ export default function Polaroid({
     if (activateIfTap && !session.moved) onActivate?.();
   }
 
+  function startDrag(event: ReactPointerEvent<HTMLElement>) {
+    event.stopPropagation();
+    if (event.pointerType === 'mouse' && event.button !== 0) return;
+    if (dragSessionRef.current) return;
+    event.preventDefault();
+
+    const card = cardRef.current;
+    if (!card) return;
+    const zIndex = onBringToFront(media.id);
+    const pointerStart = { x: event.clientX, y: event.clientY };
+    dragSessionRef.current = {
+      pointerId: event.pointerId,
+      pointerStart,
+      origin: { x: x.get(), y: y.get() },
+      scale: readBoardScale(boardScale),
+      zIndex,
+      moved: false,
+    };
+    card.setPointerCapture(event.pointerId);
+    setIsDragging(true);
+    onTransformChange(media.id, { z_index: zIndex });
+  }
+
   return (
     <motion.div
+      ref={cardRef}
       layoutId={layoutId}
       className="polaroid-card"
       data-dragging={isDragging}
@@ -219,34 +241,10 @@ export default function Polaroid({
       }}
       animate={{ rotate: rotateTarget }}
       transition={playWiggle ? WIGGLE_TRANSITION : SPRING_TRANSITION}
-      // A card owns its pointer for the entire gesture. Native pointer
-      // capture plus `touch-action: none` gives us exact, synchronous deltas
-      // on iOS without allowing the delegated board handler to pan as well.
       onPointerDown={(event) => {
-        // Native form/edit controls must receive their untouched pointer
-        // sequence so Safari can focus them and place the text caret. This
-        // guard intentionally runs before stopPropagation and pointer capture.
-        if (isPolaroidInteractiveTarget(event.target)) return;
+        // Shield the delegated board pan handler, but only the explicit
+        // white-frame zones below are allowed to start a card drag.
         event.stopPropagation();
-        if (event.pointerType === 'mouse' && event.button !== 0) return;
-        if (dragSessionRef.current) return;
-
-        const zIndex = onBringToFront(media.id);
-        const pointerStart = { x: event.clientX, y: event.clientY };
-        dragSessionRef.current = {
-          pointerId: event.pointerId,
-          pointerStart,
-          origin: { x: x.get(), y: y.get() },
-          // Sample the live camera once at pointer-down. This avoids stale
-          // render-time numbers while keeping one coordinate system for the
-          // complete gesture.
-          scale: readBoardScale(boardScale),
-          zIndex,
-          moved: false,
-        };
-        event.currentTarget.setPointerCapture(event.pointerId);
-        setIsDragging(true);
-        onTransformChange(media.id, { z_index: zIndex });
       }}
       onPointerMove={(event) => {
         const session = dragSessionRef.current;
@@ -299,6 +297,21 @@ export default function Polaroid({
       onHoverEnd={() => setIsHovered(false)}
     >
       <Pushpin color={pinColor} position={pinPosition} hovered={playWiggle} />
+
+      <div className="polaroid-drag-zones" aria-hidden="true">
+        <span className="polaroid-drag-zone polaroid-drag-zone-top" onPointerDown={startDrag} />
+        <span className="polaroid-drag-zone polaroid-drag-zone-left" onPointerDown={startDrag} />
+        <span className="polaroid-drag-zone polaroid-drag-zone-right" onPointerDown={startDrag} />
+        <span className="polaroid-drag-zone polaroid-drag-zone-bottom" onPointerDown={startDrag} />
+        <span className="polaroid-drag-grip" onPointerDown={startDrag}>
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+          <span />
+        </span>
+      </div>
 
       <MediaOwnerMenu
         media={media}

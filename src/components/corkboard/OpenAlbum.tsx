@@ -10,6 +10,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type PointerEvent as ReactPointerEvent,
   type RefObject,
 } from 'react';
 import type { MediaRow } from '@/lib/types';
@@ -29,6 +30,9 @@ const MAX_ITEMS_PER_PAGE = 3;
 const MAX_ALBUM_PAGE_INDEX = 9999;
 const PAGES_PER_SPREAD = 2;
 const KEYBOARD_NUDGE = 0.035;
+const EDGE_HOVER_DELAY_MS = 750;
+const EDGE_ZONE_MIN_PX = 52;
+const EDGE_ZONE_MAX_PX = 96;
 
 export type OpenAlbumData = {
   id: string;
@@ -63,14 +67,30 @@ type AlbumLeaf = {
   entries: PageEntry[];
 };
 
-type DragSession = {
+type AlbumDragStart = {
+  event: ReactPointerEvent<HTMLElement>;
+  media: MediaRow;
+  placement: AlbumPlacement;
+  card: HTMLDivElement;
+  cardBookX: number;
+  cardBookY: number;
+};
+
+type BookDragSession = {
   pointerId: number;
-  startClientX: number;
-  startClientY: number;
-  originBookX: number;
-  originY: number;
-  scaleX: number;
-  scaleY: number;
+  media: MediaRow;
+  originalPlacement: AlbumPlacement;
+  currentSpreadStart: number;
+  cardWidth: number;
+  cardHeight: number;
+  grabOffsetX: number;
+  grabOffsetY: number;
+  cardBookX: number;
+  cardBookY: number;
+  edgeZone: -1 | 1 | null;
+  edgeArmed: boolean;
+  edgeTimer: ReturnType<typeof setTimeout> | null;
+  proxy: HTMLDivElement;
 };
 
 function clamp(value: number, min: number, max: number) {
@@ -384,11 +404,10 @@ type AlbumMemoryCardProps = {
   entry: PageEntry;
   pageRef: RefObject<HTMLDivElement | null>;
   bookRef: RefObject<HTMLDivElement | null>;
-  spreadPageIndexes: readonly [number, number | null];
   decorative: boolean;
-  active: boolean;
+  dragging: boolean;
   order: number;
-  onActiveChange: (id: string | null) => void;
+  onDragStart?: (input: AlbumDragStart) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
   canManage: boolean;
   onCaptionChange?: (id: string, caption: string) => void;
@@ -401,11 +420,10 @@ function AlbumMemoryCard({
   entry,
   pageRef,
   bookRef,
-  spreadPageIndexes,
   decorative,
-  active,
+  dragging,
   order,
-  onActiveChange,
+  onDragStart,
   onCommit,
   canManage,
   onCaptionChange,
@@ -414,7 +432,6 @@ function AlbumMemoryCard({
   onMediaOpen,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
-  const dragSessionRef = useRef<DragSession | null>(null);
   const [videoActive, setVideoActive] = useState(false);
   const { media, mediaIndex, placement } = entry;
   const caption = captionFor(media, mediaIndex);
@@ -457,53 +474,6 @@ function AlbumMemoryCard({
     return () => observer.disconnect();
   }, [pageRef, syncFromPlacement]);
 
-  const finishDrag = useCallback(
-    async (target: HTMLDivElement, pointerId: number) => {
-      const session = dragSessionRef.current;
-      if (!session || session.pointerId !== pointerId) return;
-      dragSessionRef.current = null;
-      if (target.hasPointerCapture(pointerId)) target.releasePointerCapture(pointerId);
-
-      const page = pageRef.current;
-      const book = bookRef.current;
-      const card = cardRef.current;
-      if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
-
-      const leftPageElement = book.querySelector<HTMLElement>('.open-album-static-page-left');
-      const rightPageElement = book.querySelector<HTMLElement>('.open-album-static-page-right');
-      const leftPage = leftPageElement ? pageBoxWithinBook(leftPageElement, book) : null;
-      const rightPage = rightPageElement ? pageBoxWithinBook(rightPageElement, book) : null;
-      const sourcePage = placement.pageIndex === spreadPageIndexes[1] ? rightPage : leftPage;
-      if (!leftPage || !sourcePage) return;
-
-      const nextPlacement = placementFromBookDrop({
-        spreadPageIndexes,
-        bookWidth: book.clientWidth,
-        bookHeight: book.clientHeight,
-        leftPage,
-        rightPage,
-        cardWidth: card.offsetWidth,
-        cardHeight: card.offsetHeight,
-        cardBookX: sourcePage.left + x.get(),
-        cardBookY: sourcePage.top + y.get(),
-      });
-      onActiveChange(null);
-
-      try {
-        // An invalid sentinel is consumed by commitPlacement's client guard;
-        // it is never serialized into the Server Action payload.
-        await onCommit(
-          media,
-          nextPlacement ?? { pageIndex: Number.NaN, x: Number.NaN, y: Number.NaN }
-        );
-      } catch {
-        // commitPlacement exposes the error in the album UI. Consuming it
-        // here prevents a rejected pointer-event promise from going global.
-      }
-    },
-    [bookRef, media, onActiveChange, onCommit, pageRef, placement.pageIndex, spreadPageIndexes, x, y]
-  );
-
   const nudge = useCallback(
     (deltaX: number, deltaY: number) => {
       void onCommit(media, {
@@ -515,11 +485,37 @@ function AlbumMemoryCard({
     [media, onCommit, placement]
   );
 
+  function startDrag(event: ReactPointerEvent<HTMLElement>) {
+    event.stopPropagation();
+    if (
+      decorative ||
+      !onDragStart ||
+      (event.pointerType === 'mouse' && event.button !== 0)
+    ) return;
+    event.preventDefault();
+    const page = pageRef.current;
+    const book = bookRef.current;
+    const card = cardRef.current;
+    if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
+    const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
+    const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
+    if (!sourcePageBox) return;
+    onDragStart({
+      event,
+      media,
+      placement,
+      card,
+      cardBookX: sourcePageBox.left + x.get(),
+      cardBookY: sourcePageBox.top + y.get(),
+    });
+  }
+
   return (
     <motion.div
       ref={cardRef}
       className="open-album-memory-card"
-      data-active={active}
+      data-active={dragging}
+      data-dragging={dragging || undefined}
       data-decorative={decorative}
       tabIndex={decorative ? -1 : 0}
       role={decorative ? undefined : 'group'}
@@ -535,72 +531,15 @@ function AlbumMemoryCard({
         width: frame.cardWidth,
         height: frame.cardHeight,
         rotate: rotationForId(`${media.id}:album`),
-        zIndex: active ? 20 : order + 1,
+        zIndex: dragging ? 20 : order + 1,
       }}
-      animate={{ scale: active ? 1.035 : 1 }}
+      animate={{ scale: dragging ? 1.035 : 1 }}
       transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       onPointerDown={(event) => {
+        // Keep the book's swipe gesture from starting over a memory. Only
+        // the explicit white-frame zones below initiate card dragging.
         event.stopPropagation();
-        if (decorative || (event.pointerType === 'mouse' && event.button !== 0)) return;
-        event.preventDefault();
-        const page = pageRef.current;
-        const book = bookRef.current;
-        const card = cardRef.current;
-        if (!page || !book || !card || book.clientWidth <= 0 || book.clientHeight <= 0) return;
-        event.currentTarget.setPointerCapture(event.pointerId);
-        const bookRect = book.getBoundingClientRect();
-        const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
-        const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
-        if (!sourcePageBox) {
-          event.currentTarget.releasePointerCapture(event.pointerId);
-          return;
-        }
-        dragSessionRef.current = {
-          pointerId: event.pointerId,
-          startClientX: event.clientX,
-          startClientY: event.clientY,
-          originBookX: sourcePageBox.left + x.get(),
-          originY: sourcePageBox.top + y.get(),
-          scaleX: bookRect.width / book.clientWidth,
-          scaleY: bookRect.height / book.clientHeight,
-        };
-        onActiveChange(media.id);
       }}
-      onPointerMove={(event) => {
-        const session = dragSessionRef.current;
-        if (!session || session.pointerId !== event.pointerId) return;
-        event.preventDefault();
-        event.stopPropagation();
-        const page = pageRef.current;
-        const book = bookRef.current;
-        const card = cardRef.current;
-        if (!page || !book || !card) return;
-        const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
-        const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
-        if (!sourcePageBox) return;
-        const nextBookX = clamp(
-          session.originBookX + (event.clientX - session.startClientX) / Math.max(session.scaleX, 0.001),
-          0,
-          Math.max(0, book.clientWidth - card.offsetWidth)
-        );
-        const nextY = clamp(
-          session.originY + (event.clientY - session.startClientY) / Math.max(session.scaleY, 0.001),
-          0,
-          Math.max(0, book.clientHeight - card.offsetHeight)
-        );
-        x.set(nextBookX - sourcePageBox.left);
-        y.set(nextY - sourcePageBox.top);
-      }}
-      onPointerUp={(event) => {
-        event.preventDefault();
-        event.stopPropagation();
-        void finishDrag(event.currentTarget, event.pointerId);
-      }}
-      onPointerCancel={(event) => {
-        event.stopPropagation();
-        void finishDrag(event.currentTarget, event.pointerId);
-      }}
-      onLostPointerCapture={(event) => void finishDrag(event.currentTarget, event.pointerId)}
       onKeyDown={(event) => {
         if (decorative) return;
         const step = event.shiftKey ? KEYBOARD_NUDGE * 3 : KEYBOARD_NUDGE;
@@ -620,6 +559,22 @@ function AlbumMemoryCard({
         nudge(delta.x, delta.y);
       }}
     >
+      {!decorative ? (
+        <div className="open-album-drag-zones" aria-hidden="true">
+          <span className="open-album-drag-zone open-album-drag-zone-top" onPointerDown={startDrag} />
+          <span className="open-album-drag-zone open-album-drag-zone-left" onPointerDown={startDrag} />
+          <span className="open-album-drag-zone open-album-drag-zone-right" onPointerDown={startDrag} />
+          <span className="open-album-drag-zone open-album-drag-zone-bottom" onPointerDown={startDrag} />
+          <span className="open-album-drag-grip" onPointerDown={startDrag}>
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+            <span />
+          </span>
+        </div>
+      ) : null}
       {!decorative ? (
         <MediaOwnerMenu
           media={media}
@@ -694,8 +649,9 @@ function AlbumMemoryCard({
 type AlbumPageProps = {
   leaf: AlbumLeaf | undefined;
   bookRef: RefObject<HTMLDivElement | null>;
-  spreadPageIndexes: readonly [number, number | null];
   decorative?: boolean;
+  draggedMediaId?: string | null;
+  onDragStart?: (input: AlbumDragStart) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
   currentUserId?: string | null;
   onCaptionChange?: (id: string, caption: string) => void;
@@ -707,8 +663,9 @@ type AlbumPageProps = {
 function AlbumPage({
   leaf,
   bookRef,
-  spreadPageIndexes,
   decorative = false,
+  draggedMediaId,
+  onDragStart,
   onCommit,
   currentUserId,
   onCaptionChange,
@@ -717,7 +674,6 @@ function AlbumPage({
   onMediaOpen,
 }: AlbumPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
-  const [activeId, setActiveId] = useState<string | null>(null);
   const pageIndex = leaf?.index ?? 0;
   const entries = leaf?.entries ?? [];
 
@@ -735,11 +691,10 @@ function AlbumPage({
           entry={entry}
           pageRef={pageRef}
           bookRef={bookRef}
-          spreadPageIndexes={spreadPageIndexes}
           decorative={decorative}
-          active={activeId === entry.media.id}
+          dragging={draggedMediaId === entry.media.id}
           order={order}
-          onActiveChange={setActiveId}
+          onDragStart={onDragStart}
           onCommit={onCommit}
           canManage={currentUserId === entry.media.user_id}
           onCaptionChange={onCaptionChange}
@@ -770,6 +725,7 @@ function OpenAlbumDialog({
   const dialogRef = useRef<HTMLElement | null>(null);
   const closeButtonRef = useRef<HTMLButtonElement | null>(null);
   const bookRef = useRef<HTMLDivElement | null>(null);
+  const dragSessionRef = useRef<BookDragSession | null>(null);
   const swipeStartRef = useRef<{ pointerId: number; x: number; y: number } | null>(null);
   const saveSequenceRef = useRef(0);
   const saveQueueRef = useRef(new Map<string, Promise<SavedAlbumPlacement>>());
@@ -796,7 +752,11 @@ function OpenAlbumDialog({
   const safeInitialPage = clamp(Math.floor(initialPage), 0, Math.max(0, leaves.length - 1));
   const [spreadStart, setSpreadStart] = useState(Math.floor(safeInitialPage / 2) * 2);
   const [turn, setTurn] = useState<Turn | null>(null);
+  const [draggedMediaId, setDraggedMediaId] = useState<string | null>(null);
   const visibleSpreadStart = Math.min(spreadStart, lastSpreadStart);
+  const turnRef = useRef<Turn | null>(turn);
+  const visibleSpreadStartRef = useRef(visibleSpreadStart);
+  const lastSpreadStartRef = useRef(lastSpreadStart);
 
   const title = memoryTagFor(album.items[0]) ?? 'Memory album';
   const canGoBack = visibleSpreadStart > 0 && !turn;
@@ -805,6 +765,12 @@ function OpenAlbumDialog({
   useLayoutEffect(() => {
     placementOverridesRef.current = placementOverrides;
   }, [placementOverrides]);
+
+  useLayoutEffect(() => {
+    turnRef.current = turn;
+    visibleSpreadStartRef.current = visibleSpreadStart;
+    lastSpreadStartRef.current = lastSpreadStart;
+  }, [lastSpreadStart, turn, visibleSpreadStart]);
 
   const commitPlacement = useCallback(async (
     media: MediaRow,
@@ -900,17 +866,218 @@ function OpenAlbumDialog({
     }
   }, [onPlacementChange]);
 
-  const requestTurn = useCallback((direction: -1 | 1) => {
-    if (turn) return;
-    const targetStart = visibleSpreadStart + direction * 2;
-    if (targetStart < 0 || targetStart > lastSpreadStart) return;
+  const requestTurn = useCallback((direction: -1 | 1, fromStart = visibleSpreadStartRef.current) => {
+    if (turnRef.current) return null;
+    const targetStart = fromStart + direction * PAGES_PER_SPREAD;
+    if (targetStart < 0 || targetStart > lastSpreadStartRef.current) return null;
 
     if (shouldReduceMotion) {
+      visibleSpreadStartRef.current = targetStart;
       setSpreadStart(targetStart);
+      return targetStart;
+    }
+    const nextTurn = { direction, targetStart } as const;
+    turnRef.current = nextTurn;
+    setTurn(nextTurn);
+    return targetStart;
+  }, [shouldReduceMotion]);
+
+  const placementForDrag = useCallback((session: BookDragSession, spread: number) => {
+    const book = bookRef.current;
+    if (!book || book.clientWidth <= 0 || book.clientHeight <= 0) return null;
+    const leftElement = book.querySelector<HTMLElement>('.open-album-static-page-left');
+    const rightElement = book.querySelector<HTMLElement>('.open-album-static-page-right');
+    const leftPage = leftElement ? pageBoxWithinBook(leftElement, book) : null;
+    const rightPage = rightElement ? pageBoxWithinBook(rightElement, book) : null;
+    if (!leftPage) return null;
+
+    return placementFromBookDrop({
+      spreadPageIndexes: [spread, spread + 1],
+      bookWidth: book.clientWidth,
+      bookHeight: book.clientHeight,
+      leftPage,
+      rightPage,
+      cardWidth: session.cardWidth,
+      cardHeight: session.cardHeight,
+      cardBookX: session.cardBookX,
+      cardBookY: session.cardBookY,
+    });
+  }, []);
+
+  const clearEdgeHover = useCallback((session: BookDragSession, resetZone = true) => {
+    if (session.edgeTimer) clearTimeout(session.edgeTimer);
+    session.edgeTimer = null;
+    if (resetZone) {
+      session.edgeZone = null;
+      session.edgeArmed = true;
+    }
+    bookRef.current?.removeAttribute('data-drag-edge');
+  }, []);
+
+  const applyDragPlacement = useCallback((mediaId: string, placement: AlbumPlacement) => {
+    placementOverridesRef.current = {
+      ...placementOverridesRef.current,
+      [mediaId]: placement,
+    };
+    setPlacementOverrides((current) => ({ ...current, [mediaId]: placement }));
+  }, []);
+
+  const armEdgeHover = useCallback((session: BookDragSession, direction: -1 | 1) => {
+    const targetStart = session.currentSpreadStart + direction * PAGES_PER_SPREAD;
+    if (
+      !session.edgeArmed ||
+      turnRef.current ||
+      targetStart < 0 ||
+      targetStart > lastSpreadStartRef.current
+    ) return;
+
+    session.edgeTimer = setTimeout(() => {
+      session.edgeTimer = null;
+      if (
+        dragSessionRef.current !== session ||
+        session.edgeZone !== direction ||
+        !session.edgeArmed
+      ) return;
+      session.edgeArmed = false;
+      bookRef.current?.removeAttribute('data-drag-edge');
+      const requestedStart = requestTurn(direction, session.currentSpreadStart);
+      if (requestedStart === null) return;
+      session.currentSpreadStart = requestedStart;
+      const provisional = placementForDrag(session, requestedStart);
+      if (provisional) applyDragPlacement(session.media.id, provisional);
+    }, EDGE_HOVER_DELAY_MS);
+  }, [applyDragPlacement, placementForDrag, requestTurn]);
+
+  const updateDragProxy = useCallback((session: BookDragSession) => {
+    session.proxy.style.transform = `translate3d(${session.cardBookX}px, ${session.cardBookY}px, 0) rotate(${rotationForId(`${session.media.id}:album`)}deg) scale(1.035)`;
+  }, []);
+
+  const startBookDrag = useCallback((input: AlbumDragStart) => {
+    const book = bookRef.current;
+    if (
+      !book ||
+      dragSessionRef.current ||
+      book.clientWidth <= 0 ||
+      book.clientHeight <= 0
+    ) return;
+    const bookRect = book.getBoundingClientRect();
+    if (bookRect.width <= 0 || bookRect.height <= 0) return;
+
+    const proxy = input.card.cloneNode(true) as HTMLDivElement;
+    proxy.querySelector('.media-owner-menu')?.remove();
+    proxy.querySelectorAll('[id]').forEach((element) => element.removeAttribute('id'));
+    proxy.classList.add('open-album-drag-proxy');
+    proxy.setAttribute('aria-hidden', 'true');
+    proxy.removeAttribute('tabindex');
+    proxy.dataset.active = 'true';
+    proxy.dataset.dragging = 'true';
+    book.append(proxy);
+
+    const scaleX = book.clientWidth / bookRect.width;
+    const scaleY = book.clientHeight / bookRect.height;
+    const pointerBookX = (input.event.clientX - bookRect.left) * scaleX;
+    const pointerBookY = (input.event.clientY - bookRect.top) * scaleY;
+    const session: BookDragSession = {
+      pointerId: input.event.pointerId,
+      media: input.media,
+      originalPlacement: input.placement,
+      currentSpreadStart: visibleSpreadStartRef.current,
+      cardWidth: input.card.offsetWidth,
+      cardHeight: input.card.offsetHeight,
+      grabOffsetX: pointerBookX - input.cardBookX,
+      grabOffsetY: pointerBookY - input.cardBookY,
+      cardBookX: input.cardBookX,
+      cardBookY: input.cardBookY,
+      edgeZone: null,
+      edgeArmed: true,
+      edgeTimer: null,
+      proxy,
+    };
+    dragSessionRef.current = session;
+    swipeStartRef.current = null;
+    setDraggedMediaId(input.media.id);
+    updateDragProxy(session);
+    book.setPointerCapture(input.event.pointerId);
+  }, [updateDragProxy]);
+
+  const moveBookDrag = useCallback((event: ReactPointerEvent<HTMLDivElement>) => {
+    const session = dragSessionRef.current;
+    const book = bookRef.current;
+    if (!session || session.pointerId !== event.pointerId || !book) return false;
+    event.preventDefault();
+    event.stopPropagation();
+    const bookRect = book.getBoundingClientRect();
+    if (bookRect.width <= 0 || bookRect.height <= 0) return true;
+    const scaleX = book.clientWidth / bookRect.width;
+    const scaleY = book.clientHeight / bookRect.height;
+    const pointerBookX = (event.clientX - bookRect.left) * scaleX;
+    const pointerBookY = (event.clientY - bookRect.top) * scaleY;
+    session.cardBookX = clamp(
+      pointerBookX - session.grabOffsetX,
+      0,
+      Math.max(0, book.clientWidth - session.cardWidth)
+    );
+    session.cardBookY = clamp(
+      pointerBookY - session.grabOffsetY,
+      0,
+      Math.max(0, book.clientHeight - session.cardHeight)
+    );
+    updateDragProxy(session);
+
+    const edgeWidth = clamp(bookRect.width * 0.14, EDGE_ZONE_MIN_PX, EDGE_ZONE_MAX_PX);
+    const insideBook =
+      event.clientX >= bookRect.left && event.clientX <= bookRect.right &&
+      event.clientY >= bookRect.top && event.clientY <= bookRect.bottom;
+    const nextZone: -1 | 1 | null = !insideBook
+      ? null
+      : event.clientX <= bookRect.left + edgeWidth
+        ? -1
+        : event.clientX >= bookRect.right - edgeWidth
+          ? 1
+          : null;
+    if (nextZone !== session.edgeZone) {
+      clearEdgeHover(session);
+      session.edgeZone = nextZone;
+      if (nextZone !== null) {
+        const targetStart = session.currentSpreadStart + nextZone * PAGES_PER_SPREAD;
+        const canAutoTurn =
+          !turnRef.current &&
+          targetStart >= 0 &&
+          targetStart <= lastSpreadStartRef.current;
+        if (canAutoTurn) {
+          book.dataset.dragEdge = nextZone === -1 ? 'previous' : 'next';
+          armEdgeHover(session, nextZone);
+        }
+      }
+    }
+    return true;
+  }, [armEdgeHover, clearEdgeHover, updateDragProxy]);
+
+  const releaseBookDrag = useCallback((pointerId: number, persist: boolean) => {
+    const session = dragSessionRef.current;
+    const book = bookRef.current;
+    if (!session || session.pointerId !== pointerId) return;
+    const nextPlacement = persist
+      ? placementForDrag(session, session.currentSpreadStart)
+      : null;
+    dragSessionRef.current = null;
+    clearEdgeHover(session);
+    session.proxy.remove();
+    setDraggedMediaId(null);
+    if (book?.hasPointerCapture(pointerId)) book.releasePointerCapture(pointerId);
+
+    // Cross-spread hovering temporarily moves the card in local state so the
+    // destination spread can render. Restore the true pre-drag value before
+    // commitPlacement captures its rollback snapshot.
+    applyDragPlacement(session.media.id, session.originalPlacement);
+    if (!persist) return;
+    if (!nextPlacement) {
+      setSaveFailed(true);
+      setSaveMessage('Could not resolve the destination album page. Try the drag again.');
       return;
     }
-    setTurn({ direction, targetStart });
-  }, [lastSpreadStart, shouldReduceMotion, turn, visibleSpreadStart]);
+    void commitPlacement(session.media, nextPlacement).catch(() => undefined);
+  }, [applyDragPlacement, clearEdgeHover, commitPlacement, placementForDrag]);
 
   useEffect(() => {
     if (initialSaveStartedRef.current || Object.keys(initialPlacements).length === 0) return;
@@ -940,6 +1107,14 @@ function OpenAlbumDialog({
       document.body.style.overflow = previousOverflow;
       previouslyFocused?.focus();
     };
+  }, []);
+
+  useEffect(() => () => {
+    const session = dragSessionRef.current;
+    if (!session) return;
+    if (session.edgeTimer) clearTimeout(session.edgeTimer);
+    session.proxy.remove();
+    dragSessionRef.current = null;
   }, []);
 
   useEffect(() => {
@@ -998,11 +1173,6 @@ function OpenAlbumDialog({
   const baseRightIndex = turn?.direction === 1 ? turn.targetStart + 1 : visibleSpreadStart + 1;
   const sheetFrontIndex = turn?.direction === -1 ? turn.targetStart + 1 : visibleSpreadStart + 1;
   const sheetBackIndex = turn?.direction === -1 ? visibleSpreadStart : (turn?.targetStart ?? visibleSpreadStart);
-  const spreadPageIndexes = [
-    visibleSpreadStart,
-    visibleSpreadStart + 1 < leaves.length ? visibleSpreadStart + 1 : null,
-  ] as const;
-
   return (
     <section
       ref={dialogRef}
@@ -1054,10 +1224,20 @@ function OpenAlbumDialog({
           ref={bookRef}
           className="open-album-book max-md:[--album-mobile-logical-height:600px] max-md:[--album-mobile-logical-width:800px] max-md:origin-center"
           onPointerDown={(event) => {
+            if (dragSessionRef.current) return;
             if (event.pointerType === 'mouse') return;
             swipeStartRef.current = { pointerId: event.pointerId, x: event.clientX, y: event.clientY };
           }}
+          onPointerMove={(event) => {
+            moveBookDrag(event);
+          }}
           onPointerUp={(event) => {
+            if (dragSessionRef.current?.pointerId === event.pointerId) {
+              event.preventDefault();
+              event.stopPropagation();
+              releaseBookDrag(event.pointerId, true);
+              return;
+            }
             const start = swipeStartRef.current;
             swipeStartRef.current = null;
             if (!start || start.pointerId !== event.pointerId) return;
@@ -1066,8 +1246,16 @@ function OpenAlbumDialog({
             if (Math.abs(deltaX) < 48 || Math.abs(deltaX) < Math.abs(deltaY)) return;
             requestTurn(deltaX < 0 ? 1 : -1);
           }}
-          onPointerCancel={() => {
+          onPointerCancel={(event) => {
             swipeStartRef.current = null;
+            releaseBookDrag(event.pointerId, false);
+          }}
+          onPointerLeave={() => {
+            const session = dragSessionRef.current;
+            if (session) clearEdgeHover(session);
+          }}
+          onLostPointerCapture={(event) => {
+            releaseBookDrag(event.pointerId, false);
           }}
         >
           <div className="open-album-book-shadow" aria-hidden="true" />
@@ -1093,8 +1281,9 @@ function OpenAlbumDialog({
               <AlbumPage
                 leaf={leaves[baseLeftIndex]}
                 bookRef={bookRef}
-                spreadPageIndexes={spreadPageIndexes}
                 decorative={Boolean(turn)}
+                draggedMediaId={draggedMediaId}
+                onDragStart={startBookDrag}
                 onCommit={commitPlacement}
                 currentUserId={currentUserId}
                 onCaptionChange={onCaptionChange}
@@ -1107,8 +1296,9 @@ function OpenAlbumDialog({
               <AlbumPage
                 leaf={leaves[baseRightIndex]}
                 bookRef={bookRef}
-                spreadPageIndexes={spreadPageIndexes}
                 decorative={Boolean(turn)}
+                draggedMediaId={draggedMediaId}
+                onDragStart={startBookDrag}
                 onCommit={commitPlacement}
                 currentUserId={currentUserId}
                 onCaptionChange={onCaptionChange}
@@ -1128,6 +1318,8 @@ function OpenAlbumDialog({
               transition={{ type: 'spring', stiffness: 115, damping: 19, mass: 0.7 }}
               onAnimationComplete={() => {
                 setSpreadStart(turn.targetStart);
+                visibleSpreadStartRef.current = turn.targetStart;
+                turnRef.current = null;
                 setTurn(null);
               }}
               aria-hidden="true"
@@ -1136,8 +1328,8 @@ function OpenAlbumDialog({
                 <AlbumPage
                   leaf={leaves[sheetFrontIndex]}
                   bookRef={bookRef}
-                  spreadPageIndexes={spreadPageIndexes}
                   decorative
+                  draggedMediaId={draggedMediaId}
                   onCommit={commitPlacement}
                 />
               </div>
@@ -1145,8 +1337,8 @@ function OpenAlbumDialog({
                 <AlbumPage
                   leaf={leaves[sheetBackIndex]}
                   bookRef={bookRef}
-                  spreadPageIndexes={spreadPageIndexes}
                   decorative
+                  draggedMediaId={draggedMediaId}
                   onCommit={commitPlacement}
                 />
               </div>
@@ -1178,7 +1370,7 @@ function OpenAlbumDialog({
         <span className="open-album-sr-only">. {visibleCaptions}</span>
       </div>
       <p className="open-album-gesture-hint max-w-full break-words px-2" aria-hidden="true">
-        Drag to arrange · cross an outer edge to move pages · swipe to flip
+        Drag to arrange · hold at an outer edge to flip · swipe to flip
       </p>
     </section>
   );
