@@ -959,7 +959,7 @@ function OpenAlbumDialog({
   return (
     <section
       ref={dialogRef}
-      className="open-album-overlay"
+      className="open-album-overlay w-full max-w-full overflow-x-hidden"
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
@@ -969,8 +969,8 @@ function OpenAlbumDialog({
         if (event.target === event.currentTarget) onClose();
       }}
     >
-      <div className="open-album-header">
-        <div className="open-album-heading-copy">
+      <div className="open-album-header w-full max-w-full px-1">
+        <div className="open-album-heading-copy min-w-0">
           <p className="open-album-kicker">memokeeps album</p>
           <h2 id={titleId} dir="auto">{title}</h2>
           <p id={descriptionId}>{album.items.length} {album.items.length === 1 ? 'memory' : 'memories'}</p>
@@ -978,7 +978,7 @@ function OpenAlbumDialog({
         <button
           ref={closeButtonRef}
           type="button"
-          className="open-album-close"
+          className="open-album-close shrink-0 touch-manipulation"
           onClick={onClose}
           aria-label="Close album and return to the library"
         >
@@ -989,10 +989,10 @@ function OpenAlbumDialog({
         </button>
       </div>
 
-      <div className="open-album-stage">
+      <div className="open-album-stage w-full max-w-full">
         <button
           type="button"
-          className="open-album-control open-album-control-previous"
+          className="open-album-control open-album-control-previous touch-manipulation"
           onClick={() => requestTurn(-1)}
           disabled={!canGoBack}
           aria-label="Show previous album pages"
@@ -1105,7 +1105,7 @@ function OpenAlbumDialog({
 
         <button
           type="button"
-          className="open-album-control open-album-control-next"
+          className="open-album-control open-album-control-next touch-manipulation"
           onClick={() => requestTurn(1)}
           disabled={!canGoForward}
           aria-label="Show next album pages"
@@ -1117,7 +1117,7 @@ function OpenAlbumDialog({
         </button>
       </div>
 
-      <div className="open-album-progress" aria-live="polite" aria-atomic="true">
+      <div className="open-album-progress max-w-full break-words px-2" aria-live="polite" aria-atomic="true">
         <span>Pages {visibleLeafIndexes} of {leaves.length}</span>
         {saveMessage ? (
           <span className="open-album-save-status" data-error={saveFailed || undefined}>
@@ -1126,7 +1126,7 @@ function OpenAlbumDialog({
         ) : null}
         <span className="open-album-sr-only">. {visibleCaptions}</span>
       </div>
-      <p className="open-album-gesture-hint" aria-hidden="true">
+      <p className="open-album-gesture-hint max-w-full break-words px-2" aria-hidden="true">
         Drag to arrange · cross an outer edge to move pages · swipe to flip
       </p>
     </section>

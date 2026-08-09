@@ -1,13 +1,6 @@
 .view-mode-toggle {
-  position: absolute;
-  z-index: 950;
-  top: calc(0.75rem + env(safe-area-inset-top, 0px));
-  left: 50%;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  width: min(21rem, calc(100vw - 5.5rem));
-  padding: 0.3rem;
-  transform: translateX(-50%);
+  width: 100%;
+  max-width: 21rem;
   border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
   border-radius: 999px;
   background: color-mix(in srgb, var(--color-polaroid) 93%, var(--color-pin-cream));
@@ -74,14 +67,6 @@
 }
 
 .view-profile-link {
-  position: absolute;
-  top: 50%;
-  left: calc(100% + 0.55rem);
-  display: grid;
-  width: 2.75rem;
-  height: 2.75rem;
-  place-items: center;
-  transform: translateY(-50%);
   border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
   border-radius: 50%;
   background: color-mix(in srgb, var(--color-polaroid) 93%, var(--color-pin-cream));
@@ -385,10 +370,6 @@
 }
 
 @media (max-width: 480px) {
-  .view-mode-toggle {
-    top: calc(0.55rem + env(safe-area-inset-top, 0px));
-  }
-
   .library-view {
     padding-right: 1.1rem;
     padding-left: 1.1rem;

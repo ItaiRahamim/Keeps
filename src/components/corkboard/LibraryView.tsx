@@ -201,39 +201,41 @@ export function ViewModeToggle({
 }) {
   return (
     <div
-      className="view-mode-toggle"
+      className="view-mode-navigation pointer-events-none absolute inset-x-0 top-0 z-[950] flex max-w-full items-center justify-center gap-2 overflow-x-hidden pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.55rem+env(safe-area-inset-top))] min-[481px]:pt-[calc(0.75rem+env(safe-area-inset-top))]"
       role="navigation"
       aria-label="Board navigation"
       onPointerDown={(event) => event.stopPropagation()}
     >
-      <span className="view-mode-toggle-slider" data-mode={value} aria-hidden="true" />
-      <button
-        type="button"
-        className="view-mode-toggle-button"
-        aria-pressed={value === 'board'}
-        disabled={disabled}
-        onClick={() => onChange('board')}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 5.5h16v13H4zM8 5.5v13M16 5.5v13M4 10h16M4 14.5h16" />
-        </svg>
-        <span>Corkboard</span>
-      </button>
-      <button
-        type="button"
-        className="view-mode-toggle-button"
-        aria-pressed={value === 'library'}
-        disabled={disabled}
-        onClick={() => onChange('library')}
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <path d="M4 6.5h5v11H4zM10.5 5h5v12.5h-5zM17 7.5h3v10h-3z" />
-        </svg>
-        <span>Library</span>
-      </button>
+      <div className="view-mode-toggle pointer-events-auto relative grid min-w-0 flex-1 grid-cols-2 p-[0.3rem]">
+        <span className="view-mode-toggle-slider" data-mode={value} aria-hidden="true" />
+        <button
+          type="button"
+          className="view-mode-toggle-button"
+          aria-pressed={value === 'board'}
+          disabled={disabled}
+          onClick={() => onChange('board')}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 5.5h16v13H4zM8 5.5v13M16 5.5v13M4 10h16M4 14.5h16" />
+          </svg>
+          <span>Corkboard</span>
+        </button>
+        <button
+          type="button"
+          className="view-mode-toggle-button"
+          aria-pressed={value === 'library'}
+          disabled={disabled}
+          onClick={() => onChange('library')}
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M4 6.5h5v11H4zM10.5 5h5v12.5h-5zM17 7.5h3v10h-3z" />
+          </svg>
+          <span>Library</span>
+        </button>
+      </div>
       <Link
         href="/profile"
-        className="view-profile-link"
+        className="view-profile-link pointer-events-auto grid size-11 shrink-0 touch-manipulation place-items-center"
         aria-label="Open your profile"
         title="Your profile"
       >

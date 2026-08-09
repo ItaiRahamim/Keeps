@@ -3,7 +3,7 @@
 
 .upload-fab {
   position: fixed;
-  right: 1.25rem;
+  right: calc(1.25rem + env(safe-area-inset-right, 0px));
   bottom: calc(1.25rem + env(safe-area-inset-bottom, 0px));
   width: 3.5rem;
   height: 3.5rem;

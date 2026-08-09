@@ -2,7 +2,6 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
-import Link from 'next/link';
 import type { ClusterRow, MediaRow, UserProfile } from '@/lib/types';
 import type { AlbumPlacement } from '@/lib/media/actions';
 import { getTaggedDropPosition, groupIntoAlbums } from '@/lib/media/clustering';
@@ -706,7 +705,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   return (
     <div
       ref={viewportRef}
-      className="corkboard-viewport cork-texture"
+      className="corkboard-viewport cork-texture box-border max-w-full overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
       data-panning={isPanning}
       data-album-open={isAlbumModalActive}
       data-view-mode={viewMode}
@@ -717,18 +716,6 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       onLostPointerCapture={handlePointerEnd}
     >
       <ViewModeToggle value={viewMode} onChange={handleViewModeChange} disabled={isAlbumModalActive} />
-      <Link
-        href="/profile"
-        className="corkboard-profile-link"
-        onPointerDown={(event) => event.stopPropagation()}
-        aria-label="Open your profile"
-      >
-        <svg viewBox="0 0 24 24" aria-hidden="true">
-          <circle cx="12" cy="8" r="3.5" />
-          <path d="M5.5 20c.7-4 3-6 6.5-6s5.8 2 6.5 6" />
-        </svg>
-        <span>Profile</span>
-      </Link>
 
       <AnimatePresence mode="wait" initial={false}>
         {viewMode === 'board' ? (
