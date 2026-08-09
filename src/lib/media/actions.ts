@@ -59,9 +59,9 @@ function toMediaRow(record: MediaRecord): MediaRow {
 
 /**
  * Confirms the caller has an active session and returns their user id.
- * Every write below relies on this rather than trusting anything the
- * caller passed in — RLS enforces ownership server-side regardless, but
- * failing fast here gives a clearer error than a opaque RLS-denied insert.
+ * New rows retain their uploader in `user_id` for schema compatibility and
+ * attribution. Shared-board mutations authenticate here but deliberately do
+ * not use that id as a row filter.
  */
 async function requireUserId(supabase: Awaited<ReturnType<typeof createClient>>): Promise<string> {
   const {
@@ -276,8 +276,8 @@ function postgrestFailure(error: PostgrestErrorLike): Extract<AlbumPlacementResu
     };
   }
 
-  // `.single()` reports PGRST116 when the ownership-filtered update returns
-  // no row. Do not reveal whether a foreign row exists.
+  // `.single()` reports PGRST116 when the shared update returns no visible
+  // row. Keep the response non-enumerating in case RLS rejected the target.
   if (code === 'PGRST116') {
     return {
       ok: false,
@@ -324,9 +324,9 @@ function postgrestFailure(error: PostgrestErrorLike): Extract<AlbumPlacementResu
 /**
  * Persists a photo's proportional position inside a focused album without
  * touching `pos_x` / `pos_y`, which exclusively belong to the global board.
- * Authentication comes from the server-side cookie session, the update is
- * ownership-filtered here, and the existing media UPDATE RLS policy enforces
- * the same ownership boundary again in Postgres.
+ * Authentication comes from the server-side cookie session. The media id is
+ * intentionally the only row selector so any authenticated collaborator can
+ * arrange a photo in the shared collection (subject to the shared RLS policy).
  */
 export async function updateAlbumPlacement(
   id: string,
@@ -349,10 +349,9 @@ export async function updateAlbumPlacement(
   }
 
   let supabase: Awaited<ReturnType<typeof createClient>>;
-  let userId: string;
   try {
     supabase = await createClient();
-    userId = await requireUserId(supabase);
+    await requireUserId(supabase);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Not authenticated';
     return {
@@ -376,7 +375,6 @@ export async function updateAlbumPlacement(
       album_placement_initialized: true,
     })
     .eq('id', normalizedId)
-    .eq('user_id', userId)
     .select('id, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized')
     .single();
   const { data, error } = await Promise.resolve(request).catch((requestError: unknown) => ({
@@ -465,9 +463,9 @@ export type AlbumNameResult =
 
 /**
  * Renames a derived album by updating the shared `memory_tag` on every row
- * that currently belongs to it. The ownership preflight is intentionally
- * separate from the UPDATE: a mixed-owner album must fail atomically from
- * the UI's perspective instead of partially renaming and splitting apart.
+ * that currently belongs to it. The existence preflight keeps the operation
+ * all-or-nothing from the UI's perspective, while mixed-uploader albums are
+ * valid members of the same global collection.
  */
 export async function updateAlbumName(
   mediaIdsInput: unknown,
@@ -496,35 +494,30 @@ export async function updateAlbumName(
   }
 
   let supabase: Awaited<ReturnType<typeof createClient>>;
-  let userId: string;
   try {
     supabase = await createClient();
-    userId = await requireUserId(supabase);
+    await requireUserId(supabase);
   } catch {
     return { ok: false, message: 'Sign in again to rename this album.' };
   }
 
   const { data: existingRows, error: lookupError } = await supabase
     .from('media')
-    .select('id, user_id')
+    .select('id')
     .in('id', mediaIds);
   if (lookupError) {
-    console.error('updateAlbumName ownership lookup failed', lookupError);
-    return { ok: false, message: `Could not verify album ownership: ${lookupError.message}` };
+    console.error('updateAlbumName media lookup failed', lookupError);
+    return { ok: false, message: `Could not verify the shared album: ${lookupError.message}` };
   }
-  const ownedRows = (existingRows ?? []) as Array<{ id: string; user_id: string }>;
-  if (
-    ownedRows.length !== mediaIds.length ||
-    ownedRows.some((row) => row.user_id !== userId)
-  ) {
-    return { ok: false, message: 'You can only rename albums containing your own uploads.' };
+  const sharedRows = (existingRows ?? []) as Array<{ id: string }>;
+  if (sharedRows.length !== mediaIds.length) {
+    return { ok: false, message: 'One or more photos are missing from the shared album.' };
   }
 
   const { data: updatedRows, error: updateError } = await supabase
     .from('media')
     .update({ memory_tag: name })
     .in('id', mediaIds)
-    .eq('user_id', userId)
     .select('id, memory_tag');
   if (updateError) {
     console.error('updateAlbumName update failed', updateError);

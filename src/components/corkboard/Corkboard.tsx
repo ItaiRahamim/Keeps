@@ -5,6 +5,7 @@ import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { ClusterRow, MediaRow } from '@/lib/types';
 import type { AlbumPlacement } from '@/lib/media/actions';
 import { getTaggedDropPosition, groupIntoAlbums } from '@/lib/media/clustering';
+import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
 import Polaroid from '../polaroid/Polaroid';
 import OpenAlbum from './OpenAlbum';
 import UploadSheet from '../upload/UploadSheet';
@@ -17,6 +18,153 @@ const MAX_SCALE = 2.5;
 // feeling cramped. This is also the finite camera boundary: panning stops at
 // its edges so the board cannot be dragged away and lost in empty space.
 const SURFACE_SIZE = 4000;
+
+type Parsed<T> = { ok: true; value: T } | { ok: false };
+
+const invalid = { ok: false } as const;
+
+function parseNullableString(value: unknown): Parsed<string | null> {
+  if (value === null) return { ok: true, value: null };
+  return typeof value === 'string' ? { ok: true, value } : invalid;
+}
+
+function parseNumber(value: unknown): Parsed<number> {
+  const number =
+    typeof value === 'number' ? value : typeof value === 'string' && value.trim() ? Number(value) : NaN;
+  return Number.isFinite(number) ? { ok: true, value: number } : invalid;
+}
+
+function parseNullableNumber(value: unknown): Parsed<number | null> {
+  if (value === null) return { ok: true, value: null };
+  return parseNumber(value);
+}
+
+function parsePoint(value: unknown): Parsed<MediaRow['lat_lng']> {
+  if (value === null) return { ok: true, value: null };
+
+  let coordinates: [unknown, unknown] | null = null;
+  if (typeof value === 'string') {
+    const match = value.match(/^\(\s*([^,]+)\s*,\s*([^\)]+)\s*\)$/);
+    if (match) coordinates = [match[1], match[2]];
+  } else if (Array.isArray(value) && value.length === 2) {
+    coordinates = [value[0], value[1]];
+  } else if (typeof value === 'object' && value !== null && 'x' in value && 'y' in value) {
+    coordinates = [(value as { x: unknown }).x, (value as { y: unknown }).y];
+  }
+
+  if (!coordinates) return invalid;
+  const x = parseNumber(coordinates[0]);
+  const y = parseNumber(coordinates[1]);
+  return x.ok && y.ok ? { ok: true, value: { x: x.value, y: y.value } } : invalid;
+}
+
+/** Normalize the untyped PostgREST payload before it enters live UI state. */
+function normalizeRealtimeMediaRow(value: unknown): MediaRow | null {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return null;
+  const row = value as Record<string, unknown>;
+
+  if (
+    typeof row.id !== 'string' ||
+    !row.id ||
+    typeof row.user_id !== 'string' ||
+    !row.user_id ||
+    (row.media_type !== 'image' && row.media_type !== 'video') ||
+    typeof row.original_url !== 'string' ||
+    typeof row.created_at !== 'string'
+  ) {
+    return null;
+  }
+
+  const thumbnailUrl = parseNullableString(row.thumbnail_url);
+  const thumbnailData = parseNullableString(row.thumbnail_data);
+  const caption = parseNullableString(row.caption);
+  const memoryTag = parseNullableString(row.memory_tag);
+  const latLng = parsePoint(row.lat_lng);
+  const capturedAt = parseNullableString(row.captured_at);
+  const clusterId = parseNullableString(row.cluster_id);
+  const posX = parseNumber(row.pos_x);
+  const posY = parseNumber(row.pos_y);
+  const albumPageIndex = parseNullableNumber(row.album_page_index);
+  const albumPosX = parseNullableNumber(row.album_pos_x);
+  const albumPosY = parseNullableNumber(row.album_pos_y);
+  const albumPageNumber = parseNullableNumber(row.album_page_number);
+  const albumPageX = parseNullableNumber(row.album_page_x);
+  const albumPageY = parseNullableNumber(row.album_page_y);
+  const rotation = parseNumber(row.rotation);
+  const zIndex = parseNumber(row.z_index);
+  const durationMs = parseNullableNumber(row.duration_ms);
+  const width = parseNullableNumber(row.width);
+  const height = parseNullableNumber(row.height);
+  const placementInitialized =
+    typeof row.album_placement_initialized === 'boolean'
+      ? { ok: true as const, value: row.album_placement_initialized }
+      : invalid;
+
+  const parsed = [
+    thumbnailUrl,
+    thumbnailData,
+    caption,
+    memoryTag,
+    latLng,
+    capturedAt,
+    clusterId,
+    posX,
+    posY,
+    albumPageIndex,
+    albumPosX,
+    albumPosY,
+    albumPageNumber,
+    albumPageX,
+    albumPageY,
+    placementInitialized,
+    rotation,
+    zIndex,
+    durationMs,
+    width,
+    height,
+  ];
+  if (parsed.some((field) => !field.ok)) return null;
+
+  return {
+    id: row.id,
+    user_id: row.user_id,
+    media_type: row.media_type,
+    original_url: row.original_url,
+    thumbnail_url: thumbnailUrl.ok ? thumbnailUrl.value : null,
+    thumbnail_data: thumbnailData.ok ? thumbnailData.value : null,
+    caption: caption.ok ? caption.value : null,
+    memory_tag: memoryTag.ok ? memoryTag.value : null,
+    lat_lng: latLng.ok ? latLng.value : null,
+    captured_at: capturedAt.ok ? capturedAt.value : null,
+    cluster_id: clusterId.ok ? clusterId.value : null,
+    pos_x: posX.ok ? posX.value : 0,
+    pos_y: posY.ok ? posY.value : 0,
+    album_page_index: albumPageIndex.ok ? albumPageIndex.value : null,
+    album_pos_x: albumPosX.ok ? albumPosX.value : null,
+    album_pos_y: albumPosY.ok ? albumPosY.value : null,
+    album_page_number: albumPageNumber.ok ? albumPageNumber.value : null,
+    album_page_x: albumPageX.ok ? albumPageX.value : null,
+    album_page_y: albumPageY.ok ? albumPageY.value : null,
+    album_placement_initialized: placementInitialized.ok ? placementInitialized.value : false,
+    rotation: rotation.ok ? rotation.value : 0,
+    z_index: zIndex.ok ? zIndex.value : 0,
+    duration_ms: durationMs.ok ? durationMs.value : null,
+    width: width.ok ? width.value : null,
+    height: height.ok ? height.value : null,
+    created_at: row.created_at,
+  };
+}
+
+function appendUniqueMedia(current: MediaRow[], incoming: readonly MediaRow[]): MediaRow[] {
+  if (incoming.length === 0) return current;
+  const ids = new Set(current.map((item) => item.id));
+  const additions = incoming.filter((item) => {
+    if (ids.has(item.id)) return false;
+    ids.add(item.id);
+    return true;
+  });
+  return additions.length > 0 ? [...current, ...additions] : current;
+}
 
 function clamp(n: number, min: number, max: number) {
   return Math.min(max, Math.max(min, n));
@@ -91,6 +239,38 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   const [items, setItems] = useState<MediaRow[]>(media);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const zCounterRef = useRef(items.reduce((max, item) => Math.max(max, item.z_index), 0));
+
+  useEffect(() => {
+    const supabase = createBrowserSupabaseClient();
+    const channel = supabase
+      .channel(`corkboard-media-inserts-${crypto.randomUUID()}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'media' },
+        (payload) => {
+          const inserted = normalizeRealtimeMediaRow(payload.new);
+          if (!inserted) {
+            console.warn('Ignored malformed media INSERT from Supabase Realtime');
+            return;
+          }
+
+          zCounterRef.current = Math.max(zCounterRef.current, inserted.z_index);
+          setItems((current) => appendUniqueMedia(current, [inserted]));
+        }
+      )
+      .subscribe((status, error) => {
+        if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
+          console.error('Supabase media Realtime subscription failed', error ?? status);
+        }
+      });
+
+    return () => {
+      void supabase.removeChannel(channel).catch((error: unknown) => {
+        console.error('Failed to remove Supabase media Realtime channel', error);
+      });
+    };
+  }, []);
+
   // Grouping belongs exclusively to Library mode. The corkboard always maps
   // the raw `items` array so every photo remains individually visible and a
   // user's persisted global position is never replaced by an album cover.
@@ -393,7 +573,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
 
   const handleCreated = useCallback((rows: MediaRow[]) => {
     if (rows.length === 0) return;
-    setItems((prev) => [...prev, ...rows]);
+    setItems((prev) => appendUniqueMedia(prev, rows));
     zCounterRef.current = Math.max(zCounterRef.current, ...rows.map((row) => row.z_index));
   }, []);
 
