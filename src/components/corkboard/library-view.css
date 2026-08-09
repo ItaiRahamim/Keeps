@@ -5,7 +5,7 @@
   left: 50%;
   display: grid;
   grid-template-columns: 1fr 1fr;
-  width: min(21rem, calc(100vw - 2rem));
+  width: min(21rem, calc(100vw - 5.5rem));
   padding: 0.3rem;
   transform: translateX(-50%);
   border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
@@ -71,6 +71,37 @@
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.view-profile-link {
+  position: absolute;
+  top: 50%;
+  left: calc(100% + 0.55rem);
+  display: grid;
+  width: 2.75rem;
+  height: 2.75rem;
+  place-items: center;
+  transform: translateY(-50%);
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--color-polaroid) 93%, var(--color-pin-cream));
+  color: var(--color-polaroid-shadow-tint);
+  box-shadow: 1px 5px 15px rgba(58, 47, 34, 0.24);
+}
+
+.view-profile-link svg {
+  width: 1.2rem;
+  height: 1.2rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.view-profile-link:focus-visible {
+  outline: 3px solid color-mix(in srgb, var(--color-pin-teal) 60%, transparent);
+  outline-offset: 3px;
 }
 
 .library-view {

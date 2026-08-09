@@ -3,6 +3,14 @@
 // UI/UX agents. Do not change these shapes without coordinating — see
 // AGENTS.md / the infra agent's task spec for details.
 
+export type UserProfile = {
+  id: string;
+  display_name: string;
+  avatar_url: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
 export type MediaRow = {
   id: string;
   user_id: string;
@@ -30,6 +38,12 @@ export type MediaRow = {
   width: number | null;
   height: number | null;
   created_at: string;
+  /**
+   * Populated by relational media reads. Realtime change payloads contain
+   * only physical media-table columns, so a just-arrived row may temporarily
+   * carry null until a joined read refreshes it.
+   */
+  uploader: UserProfile | null;
 };
 
 export type ClusterRow = {

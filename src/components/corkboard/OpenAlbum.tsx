@@ -21,6 +21,8 @@ import {
 } from '@/lib/media/actions';
 import { hashString, rotationForId } from '../lib/deterministic';
 import { getPolaroidGeometry, POLAROID_MEDIA_WIDTH_PX } from '../polaroid/sizing';
+import MediaOwnerMenu from '../polaroid/MediaOwnerMenu';
+import { PhotoContributor } from './ContributorAttribution';
 import './open-album.css';
 
 const MAX_ITEMS_PER_PAGE = 3;
@@ -37,6 +39,9 @@ export type OpenAlbumProps = {
   album: OpenAlbumData;
   onClose: () => void;
   onPlacementChange?: (mediaId: string, placement: AlbumPlacement) => void;
+  currentUserId?: string | null;
+  onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
+  onDelete?: (id: string) => void;
   initialPage?: number;
 };
 
@@ -383,6 +388,9 @@ type AlbumMemoryCardProps = {
   order: number;
   onActiveChange: (id: string | null) => void;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
+  canManage: boolean;
+  onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
+  onDelete?: (id: string) => void;
 };
 
 function AlbumMemoryCard({
@@ -395,6 +403,9 @@ function AlbumMemoryCard({
   order,
   onActiveChange,
   onCommit,
+  canManage,
+  onMemoryTagChange,
+  onDelete,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const dragSessionRef = useRef<DragSession | null>(null);
@@ -601,6 +612,14 @@ function AlbumMemoryCard({
         nudge(delta.x, delta.y);
       }}
     >
+      {!decorative && canManage && onMemoryTagChange && onDelete ? (
+        <MediaOwnerMenu
+          mediaId={media.id}
+          memoryTag={media.memory_tag}
+          onMoved={onMemoryTagChange}
+          onDeleted={onDelete}
+        />
+      ) : null}
       <div className="open-album-memory-photo">
         {source ? (
           <Image
@@ -626,6 +645,7 @@ function AlbumMemoryCard({
             </svg>
           </span>
         ) : null}
+        <PhotoContributor media={media} />
       </div>
       <p className="open-album-caption" dir="auto">{caption}</p>
     </motion.div>
@@ -638,6 +658,9 @@ type AlbumPageProps = {
   spreadPageIndexes: readonly [number, number | null];
   decorative?: boolean;
   onCommit: (media: MediaRow, placement: AlbumPlacement) => Promise<SavedAlbumPlacement>;
+  currentUserId?: string | null;
+  onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
+  onDelete?: (id: string) => void;
 };
 
 function AlbumPage({
@@ -646,6 +669,9 @@ function AlbumPage({
   spreadPageIndexes,
   decorative = false,
   onCommit,
+  currentUserId,
+  onMemoryTagChange,
+  onDelete,
 }: AlbumPageProps) {
   const pageRef = useRef<HTMLDivElement | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
@@ -672,6 +698,9 @@ function AlbumPage({
           order={order}
           onActiveChange={setActiveId}
           onCommit={onCommit}
+          canManage={currentUserId === entry.media.user_id}
+          onMemoryTagChange={onMemoryTagChange}
+          onDelete={onDelete}
         />
       ))}
       {leaf ? <span className="open-album-page-number" aria-hidden="true">{pageIndex + 1}</span> : null}
@@ -683,6 +712,9 @@ function OpenAlbumDialog({
   album,
   onClose,
   onPlacementChange,
+  currentUserId,
+  onMemoryTagChange,
+  onDelete,
   initialPage = 0,
 }: OpenAlbumProps) {
   const shouldReduceMotion = useReducedMotion();
@@ -1017,6 +1049,9 @@ function OpenAlbumDialog({
                 spreadPageIndexes={spreadPageIndexes}
                 decorative={Boolean(turn)}
                 onCommit={commitPlacement}
+                currentUserId={currentUserId}
+                onMemoryTagChange={onMemoryTagChange}
+                onDelete={onDelete}
               />
             </div>
             <div className="open-album-static-page open-album-static-page-right">
@@ -1026,6 +1061,9 @@ function OpenAlbumDialog({
                 spreadPageIndexes={spreadPageIndexes}
                 decorative={Boolean(turn)}
                 onCommit={commitPlacement}
+                currentUserId={currentUserId}
+                onMemoryTagChange={onMemoryTagChange}
+                onDelete={onDelete}
               />
             </div>
           </div>

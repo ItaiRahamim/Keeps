@@ -16,6 +16,8 @@ import {
 import { CARD_WIGGLE_FRACTION, DRAG_TILT_DEG, PIN_WIGGLE_KEYFRAMES, WIGGLE_TRANSITION } from '../lib/motion';
 import { positionFromPointerDelta, type DragPoint } from './drag-position';
 import { getPolaroidGeometry, POLAROID_CARD_WIDTH_PX } from './sizing';
+import { PhotoContributor } from '../corkboard/ContributorAttribution';
+import MediaOwnerMenu from './MediaOwnerMenu';
 import './polaroid.css';
 
 const SPRING_TRANSITION = { type: 'spring' as const, stiffness: 300, damping: 28 };
@@ -83,6 +85,9 @@ export type PolaroidProps = {
   onActivate?: () => void;
   activationLabel?: string;
   layoutId?: string;
+  canManage?: boolean;
+  onMemoryTagChange?: (id: string, memoryTag: string | null) => void;
+  onDelete?: (id: string) => void;
 };
 
 export default function Polaroid({
@@ -94,6 +99,9 @@ export default function Polaroid({
   onActivate,
   activationLabel,
   layoutId,
+  canManage = false,
+  onMemoryTagChange,
+  onDelete,
 }: PolaroidProps) {
   const shouldReduceMotion = useReducedMotion();
   const [isHovered, setIsHovered] = useState(false);
@@ -287,6 +295,15 @@ export default function Polaroid({
     >
       <Pushpin color={pinColor} position={pinPosition} hovered={playWiggle} />
 
+      {canManage && onMemoryTagChange && onDelete ? (
+        <MediaOwnerMenu
+          mediaId={media.id}
+          memoryTag={media.memory_tag}
+          onMoved={onMemoryTagChange}
+          onDeleted={onDelete}
+        />
+      ) : null}
+
       <div className="polaroid-body">
         <div
           className="polaroid-media"
@@ -337,6 +354,8 @@ export default function Polaroid({
               </svg>
             </div>
           ) : null}
+
+          <PhotoContributor media={media} />
         </div>
 
         <div

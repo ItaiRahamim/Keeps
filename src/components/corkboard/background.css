@@ -47,6 +47,50 @@
   pointer-events: none;
 }
 
+.corkboard-viewport[data-album-open='true'] .corkboard-profile-link {
+  visibility: hidden;
+  pointer-events: none;
+}
+
+.corkboard-profile-link {
+  position: absolute;
+  z-index: 950;
+  bottom: calc(1rem + env(safe-area-inset-bottom, 0px));
+  left: calc(1rem + env(safe-area-inset-left, 0px));
+  display: inline-flex;
+  min-height: 44px;
+  align-items: center;
+  gap: 0.42rem;
+  padding: 0.55rem 0.85rem;
+  border: 1px solid color-mix(in srgb, var(--color-polaroid-shadow-tint) 16%, transparent);
+  border-radius: 999px;
+  color: var(--color-polaroid-shadow-tint);
+  background: color-mix(in srgb, var(--color-polaroid) 94%, var(--color-pin-cream));
+  box-shadow: 1px 5px 15px rgba(58, 47, 34, 0.24);
+  font: 650 0.78rem/1 var(--font-ui);
+  text-decoration: none;
+  touch-action: manipulation;
+}
+
+.corkboard-profile-link svg {
+  width: 1.1rem;
+  height: 1.1rem;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+}
+
+.corkboard-profile-link:hover {
+  transform: translateY(-2px);
+  background: var(--color-polaroid);
+}
+
+.corkboard-profile-link:focus-visible {
+  outline: 3px solid var(--color-pin-mustard);
+  outline-offset: 3px;
+}
+
 .corkboard-surface {
   position: absolute;
   top: 0;

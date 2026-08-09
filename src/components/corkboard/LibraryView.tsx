@@ -2,11 +2,13 @@
 
 import { useRef, useState } from 'react';
 import Image from 'next/image';
+import Link from 'next/link';
 import { motion } from 'framer-motion';
 import type { MediaRow } from '@/lib/types';
 import { getMediaUrl } from '@/lib/contracts';
 import { updateAlbumName } from '@/lib/media/actions';
 import { pinColorForId, rotationForId } from '../lib/deterministic';
+import { AlbumContributors } from './ContributorAttribution';
 import './library-view.css';
 
 export type LibraryAlbum = { id: string; items: MediaRow[] };
@@ -179,6 +181,7 @@ function LibraryAlbumCard({
         <span className="library-album-count">
           {isSaving ? 'Saving…' : `${count} ${count === 1 ? 'memory' : 'memories'}`}
         </span>
+        <AlbumContributors mediaItems={album.items} />
         {errorMessage ? <small role="alert">{errorMessage}</small> : null}
       </span>
     </motion.article>
@@ -199,8 +202,8 @@ export function ViewModeToggle({
   return (
     <div
       className="view-mode-toggle"
-      role="group"
-      aria-label="Choose how to view your memories"
+      role="navigation"
+      aria-label="Board navigation"
       onPointerDown={(event) => event.stopPropagation()}
     >
       <span className="view-mode-toggle-slider" data-mode={value} aria-hidden="true" />
@@ -228,6 +231,17 @@ export function ViewModeToggle({
         </svg>
         <span>Library</span>
       </button>
+      <Link
+        href="/profile"
+        className="view-profile-link"
+        aria-label="Open your profile"
+        title="Your profile"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5.5 19c.7-3.3 3-5 6.5-5s5.8 1.7 6.5 5" />
+        </svg>
+      </Link>
     </div>
   );
 }

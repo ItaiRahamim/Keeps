@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
-import type { ClusterRow, MediaRow } from '@/lib/types';
+import Link from 'next/link';
+import type { ClusterRow, MediaRow, UserProfile } from '@/lib/types';
 import type { AlbumPlacement } from '@/lib/media/actions';
 import { getTaggedDropPosition, groupIntoAlbums } from '@/lib/media/clustering';
 import { createClient as createBrowserSupabaseClient } from '@/lib/supabase/client';
@@ -152,6 +153,30 @@ function normalizeRealtimeMediaRow(value: unknown): MediaRow | null {
     width: width.ok ? width.value : null,
     height: height.ok ? height.value : null,
     created_at: row.created_at,
+    // postgres_changes payloads contain columns from `media` only; joined
+    // relations are populated by getMedia/createMedia reads instead.
+    uploader: null,
+  };
+}
+
+function normalizeRealtimeUserProfile(value: unknown): UserProfile | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const profile = value as Record<string, unknown>;
+  if (
+    typeof profile.id !== 'string' ||
+    typeof profile.display_name !== 'string' ||
+    typeof profile.created_at !== 'string' ||
+    typeof profile.updated_at !== 'string' ||
+    (profile.avatar_url !== null && typeof profile.avatar_url !== 'string')
+  ) {
+    return null;
+  }
+  return {
+    id: profile.id,
+    display_name: profile.display_name,
+    avatar_url: profile.avatar_url,
+    created_at: profile.created_at,
+    updated_at: profile.updated_at,
   };
 }
 
@@ -237,25 +262,47 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   void clusters;
 
   const [items, setItems] = useState<MediaRow[]>(media);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [viewMode, setViewMode] = useState<ViewMode>('board');
   const zCounterRef = useRef(items.reduce((max, item) => Math.max(max, item.z_index), 0));
 
   useEffect(() => {
     const supabase = createBrowserSupabaseClient();
+    let active = true;
+    void supabase.auth.getUser().then(({ data, error }) => {
+      if (!active) return;
+      if (error) {
+        console.error('Could not load the current user for media controls', error);
+        return;
+      }
+      setCurrentUserId(data.user?.id ?? null);
+    });
     const channel = supabase
       .channel(`corkboard-media-inserts-${crypto.randomUUID()}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'media' },
-        (payload) => {
+        async (payload) => {
           const inserted = normalizeRealtimeMediaRow(payload.new);
           if (!inserted) {
             console.warn('Ignored malformed media INSERT from Supabase Realtime');
             return;
           }
 
-          zCounterRef.current = Math.max(zCounterRef.current, inserted.z_index);
-          setItems((current) => appendUniqueMedia(current, [inserted]));
+          const { data: uploaderData, error: uploaderError } = await supabase
+            .from('profiles')
+            .select('id, display_name, avatar_url, created_at, updated_at')
+            .eq('id', inserted.user_id)
+            .maybeSingle();
+          if (uploaderError) {
+            console.error('Could not hydrate Realtime uploader attribution', uploaderError);
+          }
+          const enriched = {
+            ...inserted,
+            uploader: normalizeRealtimeUserProfile(uploaderData),
+          };
+          zCounterRef.current = Math.max(zCounterRef.current, enriched.z_index);
+          setItems((current) => appendUniqueMedia(current, [enriched]));
         }
       )
       .subscribe((status, error) => {
@@ -265,6 +312,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       });
 
     return () => {
+      active = false;
       void supabase.removeChannel(channel).catch((error: unknown) => {
         console.error('Failed to remove Supabase media Realtime channel', error);
       });
@@ -550,6 +598,16 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     );
   }, []);
 
+  const handleMemoryTagChange = useCallback((id: string, memoryTag: string | null) => {
+    setItems((current) =>
+      current.map((item) => (item.id === id ? { ...item, memory_tag: memoryTag } : item))
+    );
+  }, []);
+
+  const handleDelete = useCallback((id: string) => {
+    setItems((current) => current.filter((item) => item.id !== id));
+  }, []);
+
   const handleBringToFront = useCallback(() => {
     zCounterRef.current += 1;
     return zCounterRef.current;
@@ -659,6 +717,18 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       onLostPointerCapture={handlePointerEnd}
     >
       <ViewModeToggle value={viewMode} onChange={handleViewModeChange} disabled={isAlbumModalActive} />
+      <Link
+        href="/profile"
+        className="corkboard-profile-link"
+        onPointerDown={(event) => event.stopPropagation()}
+        aria-label="Open your profile"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="8" r="3.5" />
+          <path d="M5.5 20c.7-4 3-6 6.5-6s5.8 2 6.5 6" />
+        </svg>
+        <span>Profile</span>
+      </Link>
 
       <AnimatePresence mode="wait" initial={false}>
         {viewMode === 'board' ? (
@@ -683,6 +753,9 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
                 onTransformChange={handleTransformChange}
                 onBringToFront={handleBringToFront}
                 onCaptionChange={handleCaptionChange}
+                canManage={currentUserId === mediaItem.user_id}
+                onMemoryTagChange={handleMemoryTagChange}
+                onDelete={handleDelete}
               />
             ))}
           </motion.div>
@@ -712,6 +785,9 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
           album={activeAlbum}
           onClose={handleCloseAlbum}
           onPlacementChange={handleAlbumPlacementChange}
+          currentUserId={currentUserId}
+          onMemoryTagChange={handleMemoryTagChange}
+          onDelete={handleDelete}
         />
       ) : null}
     </div>

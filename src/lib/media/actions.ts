@@ -2,16 +2,19 @@
 
 import { revalidatePath } from 'next/cache';
 import { createClient } from '@/lib/supabase/server';
-import type { MediaRow, ClusterRow } from '@/lib/types';
+import type { MediaRow, ClusterRow, UserProfile } from '@/lib/types';
 
 // Row shape as it comes back from PostgREST, before `lat_lng` (a Postgres
 // `point`) is normalized into MediaRow's `{ x, y } | null` shape. PostgREST
 // has no special handling for geometric types, so `point` columns round-trip
 // as their Postgres text form, e.g. "(1,2)" — see parsePoint/formatPoint.
-type MediaRecord = Omit<MediaRow, 'lat_lng'> & { lat_lng: unknown };
+type MediaRecord = Omit<MediaRow, 'lat_lng' | 'uploader'> & {
+  lat_lng: unknown;
+  uploader: unknown;
+};
 
 const MEDIA_COLUMNS =
-  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized, rotation, z_index, duration_ms, width, height, created_at';
+  'id, user_id, media_type, original_url, thumbnail_url, thumbnail_data, caption, memory_tag, lat_lng, captured_at, cluster_id, pos_x, pos_y, album_page_index, album_pos_x, album_pos_y, album_page_number, album_page_x, album_page_y, album_placement_initialized, rotation, z_index, duration_ms, width, height, created_at, uploader:profiles!media_uploader_profile_fkey(id, display_name, avatar_url, created_at, updated_at)';
 
 const CLUSTER_COLUMNS = 'id, name, cover_media_id, created_at';
 
@@ -50,11 +53,36 @@ function normalizeMemoryTagForStorage(tag: string | null | undefined): string | 
   return normalized || null;
 }
 
+function toUserProfile(value: unknown): UserProfile | null {
+  const candidate = Array.isArray(value) ? value[0] : value;
+  if (!candidate || typeof candidate !== 'object') return null;
+
+  const profile = candidate as Record<string, unknown>;
+  if (
+    typeof profile.id !== 'string' ||
+    typeof profile.display_name !== 'string' ||
+    typeof profile.created_at !== 'string' ||
+    typeof profile.updated_at !== 'string' ||
+    (profile.avatar_url !== null && typeof profile.avatar_url !== 'string')
+  ) {
+    return null;
+  }
+
+  return {
+    id: profile.id,
+    display_name: profile.display_name,
+    avatar_url: profile.avatar_url,
+    created_at: profile.created_at,
+    updated_at: profile.updated_at,
+  };
+}
+
 function toMediaRow(record: MediaRecord): MediaRow {
   return {
     ...record,
     lat_lng: parsePoint(record.lat_lng),
-  } as MediaRow;
+    uploader: toUserProfile(record.uploader),
+  };
 }
 
 /**
