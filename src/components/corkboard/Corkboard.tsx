@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion, useMotionValue } from 'framer-motion';
 import type { ClusterRow, MediaRow, UserProfile } from '@/lib/types';
 import type { AlbumPlacement } from '@/lib/media/actions';
@@ -11,6 +11,7 @@ import OpenAlbum from './OpenAlbum';
 import UploadSheet from '../upload/UploadSheet';
 import LibraryView, { ViewModeToggle, type LibraryAlbum, type ViewMode } from './LibraryView';
 import MediaLightbox from '../media/MediaLightbox';
+import { getPolaroidGeometry } from '../polaroid/sizing';
 import './background.css';
 
 const MIN_SCALE = 0.4;
@@ -19,6 +20,7 @@ const MAX_SCALE = 2.5;
 // feeling cramped. This is also the finite camera boundary: panning stops at
 // its edges so the board cannot be dragged away and lost in empty space.
 const SURFACE_SIZE = 4000;
+const INITIAL_CAMERA_GUTTER_PX = 40;
 
 type Parsed<T> = { ok: true; value: T } | { ok: false };
 
@@ -220,24 +222,137 @@ function midpoint(a: PointerPosition, b: PointerPosition): PointerPosition {
   return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 };
 }
 
+function boardPointAtViewportPoint(camera: Camera, point: PointerPosition): PointerPosition {
+  return {
+    x: (point.x - camera.x) / camera.scale,
+    y: (point.y - camera.y) / camera.scale,
+  };
+}
+
 /**
- * Keeps at least one edge of the finite board against every viewport edge.
- * If a zoomed-out board becomes smaller than an axis of the viewport, it is
- * centered on that axis instead of being allowed to drift into empty space.
+ * Top-left transform origin contract: the requested board point remains
+ * under the live viewport point while scale and/or pinch midpoint changes.
+ */
+function cameraForBoardAnchor(
+  boardPoint: PointerPosition,
+  viewportPoint: PointerPosition,
+  scale: number
+): Camera {
+  return {
+    x: viewportPoint.x - boardPoint.x * scale,
+    y: viewportPoint.y - boardPoint.y * scale,
+    scale,
+  };
+}
+
+function initialCameraForContent(
+  mediaItems: readonly MediaRow[],
+  viewportWidth: number,
+  viewportHeight: number
+): Camera {
+  const bounds = mediaItems.reduce<{
+    left: number;
+    top: number;
+    right: number;
+    bottom: number;
+  } | null>((current, item) => {
+    if (!Number.isFinite(item.pos_x) || !Number.isFinite(item.pos_y)) return current;
+    const geometry = getPolaroidGeometry(item.width, item.height);
+    const left = clamp(item.pos_x, 0, SURFACE_SIZE);
+    const top = clamp(item.pos_y, 0, SURFACE_SIZE);
+    const right = clamp(item.pos_x + geometry.cardWidth, 0, SURFACE_SIZE);
+    const bottom = clamp(item.pos_y + geometry.cardHeight, 0, SURFACE_SIZE);
+    if (!current) return { left, top, right, bottom };
+    return {
+      left: Math.min(current.left, left),
+      top: Math.min(current.top, top),
+      right: Math.max(current.right, right),
+      bottom: Math.max(current.bottom, bottom),
+    };
+  }, null);
+
+  const center = bounds
+    ? { x: (bounds.left + bounds.right) / 2, y: (bounds.top + bounds.bottom) / 2 }
+    : { x: SURFACE_SIZE / 2, y: SURFACE_SIZE / 2 };
+  const contentWidth = bounds ? Math.max(1, bounds.right - bounds.left) : SURFACE_SIZE;
+  const contentHeight = bounds ? Math.max(1, bounds.bottom - bounds.top) : SURFACE_SIZE;
+  const availableWidth = Math.max(1, viewportWidth - INITIAL_CAMERA_GUTTER_PX * 2);
+  const availableHeight = Math.max(1, viewportHeight - INITIAL_CAMERA_GUTTER_PX * 2);
+  const scale = bounds
+    ? clamp(
+        Math.min(1, availableWidth / contentWidth, availableHeight / contentHeight),
+        MIN_SCALE,
+        1
+      )
+    : 1;
+
+  const centered = clampCamera(
+    cameraForBoardAnchor(
+      center,
+      { x: viewportWidth / 2, y: viewportHeight / 2 },
+      scale
+    ),
+    viewportWidth,
+    viewportHeight
+  );
+
+  // At the minimum zoom, a very sparse board can have an empty geometric
+  // midpoint (for example one old card near each opposite edge). Never open
+  // on empty cork in that case: fall back to the oldest persisted card.
+  const hasVisibleCard = bounds && mediaItems.some((item) => {
+    if (!Number.isFinite(item.pos_x) || !Number.isFinite(item.pos_y)) return false;
+    const geometry = getPolaroidGeometry(item.width, item.height);
+    const left = centered.x + item.pos_x * centered.scale;
+    const top = centered.y + item.pos_y * centered.scale;
+    const right = left + geometry.cardWidth * centered.scale;
+    const bottom = top + geometry.cardHeight * centered.scale;
+    return right >= 0 && left <= viewportWidth && bottom >= 0 && top <= viewportHeight;
+  });
+  if (bounds && !hasVisibleCard) {
+    const first = mediaItems.find(
+      (item) => Number.isFinite(item.pos_x) && Number.isFinite(item.pos_y)
+    );
+    if (first) {
+      const geometry = getPolaroidGeometry(first.width, first.height);
+      return clampCamera(
+        cameraForBoardAnchor(
+          {
+            x: first.pos_x + geometry.cardWidth / 2,
+            y: first.pos_y + geometry.cardHeight / 2,
+          },
+          { x: viewportWidth / 2, y: viewportHeight / 2 },
+          scale
+        ),
+        viewportWidth,
+        viewportHeight
+      );
+    }
+  }
+
+  return centered;
+}
+
+/**
+ * Keeps the finite board crossing the viewport center on both axes, which
+ * allows memories placed near a board edge to be centered without permitting
+ * an unbounded pan into empty space. A board smaller than the viewport is
+ * locked to the exact center of that axis.
  */
 function clampCamera(camera: Camera, viewportWidth: number, viewportHeight: number): Camera {
   const scale = clamp(camera.scale, MIN_SCALE, MAX_SCALE);
   const surfaceWidth = SURFACE_SIZE * scale;
   const surfaceHeight = SURFACE_SIZE * scale;
 
-  const minX = Math.min(0, viewportWidth - surfaceWidth);
-  const maxX = Math.max(0, (viewportWidth - surfaceWidth) / 2);
-  const minY = Math.min(0, viewportHeight - surfaceHeight);
-  const maxY = Math.max(0, (viewportHeight - surfaceHeight) / 2);
+  const centeredX = (viewportWidth - surfaceWidth) / 2;
+  const centeredY = (viewportHeight - surfaceHeight) / 2;
+  const minX = surfaceWidth <= viewportWidth ? centeredX : viewportWidth / 2 - surfaceWidth;
+  const maxX = surfaceWidth <= viewportWidth ? centeredX : viewportWidth / 2;
+  const minY = surfaceHeight <= viewportHeight ? centeredY : viewportHeight / 2 - surfaceHeight;
+  const maxY = surfaceHeight <= viewportHeight ? centeredY : viewportHeight / 2;
 
   return {
-    x: surfaceWidth <= viewportWidth ? maxX : clamp(camera.x, minX, 0),
-    y: surfaceHeight <= viewportHeight ? maxY : clamp(camera.y, minY, 0),
+    x: clamp(camera.x, minX, maxX),
+    y: clamp(camera.y, minY, maxY),
     scale,
   };
 }
@@ -337,6 +452,8 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
 
   const viewportRef = useRef<HTMLDivElement | null>(null);
   const surfaceRef = useRef<HTMLDivElement | null>(null);
+  const initialMediaRef = useRef<readonly MediaRow[]>(media);
+  const cameraInitializedRef = useRef(false);
   const cameraRef = useRef<Camera>({ x: 0, y: 0, scale: 1 });
   const viewportSizeRef = useRef({ width: 0, height: 0, left: 0, top: 0 });
   const activePointersRef = useRef(new Map<number, PointerPosition>());
@@ -378,7 +495,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
     [cameraScale, cameraX, cameraY]
   );
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const viewport = viewportRef.current;
     if (!viewport) return;
 
@@ -390,6 +507,13 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         left: rect.left,
         top: rect.top,
       };
+      if (!cameraInitializedRef.current && rect.width > 0 && rect.height > 0) {
+        cameraInitializedRef.current = true;
+        applyCamera(
+          initialCameraForContent(initialMediaRef.current, rect.width, rect.height)
+        );
+        return;
+      }
       // Keep the camera frozen while the album is modal. We still record
       // the latest viewport bounds so the next board gesture uses accurate
       // coordinates after an orientation/window-size change.
@@ -430,16 +554,9 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       const focus = { x: e.clientX - rect.left, y: e.clientY - rect.top };
       const current = cameraRef.current;
       const nextScale = clamp(current.scale * Math.exp(-e.deltaY * 0.001), MIN_SCALE, MAX_SCALE);
-      const boardPoint = {
-        x: (focus.x - current.x) / current.scale,
-        y: (focus.y - current.y) / current.scale,
-      };
+      const boardPoint = boardPointAtViewportPoint(current, focus);
 
-      applyCamera({
-        x: focus.x - boardPoint.x * nextScale,
-        y: focus.y - boardPoint.y * nextScale,
-        scale: nextScale,
-      });
+      applyCamera(cameraForBoardAnchor(boardPoint, focus, nextScale));
       setIsZooming(true);
       if (zoomIdleTimeoutRef.current) clearTimeout(zoomIdleTimeoutRef.current);
       zoomIdleTimeoutRef.current = setTimeout(() => setIsZooming(false), 200);
@@ -471,10 +588,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
       mode: 'pinch',
       pointerIds,
       startDistance: Math.max(distance(first, second), 1),
-      anchorOnBoard: {
-        x: (center.x - current.x) / current.scale,
-        y: (center.y - current.y) / current.scale,
-      },
+      anchorOnBoard: boardPointAtViewportPoint(current, center),
       startCamera: { ...current },
     };
   }, []);
@@ -541,11 +655,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
         MIN_SCALE,
         MAX_SCALE
       );
-      applyCamera({
-        x: center.x - gesture.anchorOnBoard.x * nextScale,
-        y: center.y - gesture.anchorOnBoard.y * nextScale,
-        scale: nextScale,
-      });
+      applyCamera(cameraForBoardAnchor(gesture.anchorOnBoard, center, nextScale));
     },
     [applyCamera, isAlbumModalActive, viewMode]
   );
@@ -711,7 +821,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   return (
     <div
       ref={viewportRef}
-      className="corkboard-viewport cork-texture box-border max-w-full overflow-x-hidden"
+      className="corkboard-viewport cork-texture box-border min-h-dvh max-w-full overflow-x-hidden"
       data-panning={isPanning}
       data-album-open={isAlbumModalActive}
       data-view-mode={viewMode}
@@ -736,7 +846,14 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             transition={{ duration: 0.18 }}
-            style={{ x: cameraX, y: cameraY, scale: cameraScale, width: SURFACE_SIZE, height: SURFACE_SIZE }}
+            style={{
+              x: cameraX,
+              y: cameraY,
+              scale: cameraScale,
+              transformOrigin: '0 0',
+              width: SURFACE_SIZE,
+              height: SURFACE_SIZE,
+            }}
           >
             {items.map((mediaItem) => (
               <Polaroid

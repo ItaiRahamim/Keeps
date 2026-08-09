@@ -11,11 +11,10 @@
 
 .login-page {
   /*
-   * The root body owns the home-indicator inset. Filling its definite
-   * content height avoids adding a second viewport-height box below that
-   * padding while this page independently protects the sensor-housing edge.
+   * The page paints through the full dynamic viewport; only its content is
+   * inset from the sensor-housing edge, so no flat safe-area spacer appears.
    */
-  min-height: 100%;
+  min-height: 100dvh;
   display: flex;
   align-items: center;
   justify-content: center;

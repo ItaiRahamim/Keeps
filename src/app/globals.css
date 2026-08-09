@@ -57,6 +57,12 @@
 
 html,
 body {
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+  min-height: 100dvh;
+  margin: 0;
+  padding: 0;
   background: #b8865b;
 }
 
@@ -72,7 +78,6 @@ body {
  */
 body {
   box-sizing: border-box;
-  padding-bottom: env(safe-area-inset-bottom, 0px);
   color: var(--color-polaroid-shadow-tint);
   font-family: var(--font-ui);
 }

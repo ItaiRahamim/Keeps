@@ -72,34 +72,24 @@ export default function RootLayout({
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${playpenSansHebrew.variable} h-full antialiased`}
+      className={`${geistSans.variable} ${geistMono.variable} ${caveat.variable} ${playpenSansHebrew.variable} h-dvh min-h-dvh antialiased`}
     >
       {/*
-        `h-full` (an explicit `height: 100%`), not `min-h-full`
-        (`min-height: 100%`), is load-bearing here.
+        `h-dvh` is load-bearing here: it gives every percentage-height board
+        descendant a definite containing block while tracking iOS's dynamic
+        standalone viewport all the way through the home-indicator region.
         `<main className="relative flex-1">` in page.tsx renders
         `<Corkboard>`, whose root `.corkboard-viewport` uses `height: 100%`
         to fill it (background.css) — and every one of its own children
         (`.corkboard-surface`, `.corkboard-empty-state`, the upload FAB) is
         `position: absolute`/`fixed`, so `.corkboard-viewport` has zero
         in-flow content to fall back on for an auto height.
-        Per CSS2.1 §10.5, a percentage `height` only resolves against a
-        containing block whose height was "specified explicitly" — and
-        `min-height` does NOT count, even once the box's flex-grown/clamped
-        *rendered* size fills the viewport. `min-h-full` here left every
-        ancestor's height "indefinite" for that purpose, so `.corkboard-viewport`'s
-        `height: 100%` fell back to `auto` -> resolved to 0 against its
-        all-out-of-flow children -> the entire cork-textured board (and any
-        Polaroids on it) collapsed invisibly, leaving only the flat body
-        background and the fixed-position upload FAB visible. Confirmed via
-        a live, HMR-independent DOM+CSS repro (isolated test nodes, no
-        React/Corkboard involved): swapping just this class from
-        `min-h-full` to `h-full` took a percentage-sized child from
-        `height: 0px` to its correct flex-grown share. `h-full` gives
-        `body` (and everything under it) a height CSS treats as definite,
-        so `height: 100%` resolves all the way down.
+        A minimum height is insufficient for resolving that percentage. The
+        explicit dynamic height also removes the need for document padding:
+        the cork texture paints to the physical bottom, while fixed controls
+        independently apply `env(safe-area-inset-bottom)` to their offsets.
       */}
-      <body className="h-full flex flex-col">{children}</body>
+      <body className="h-dvh min-h-dvh flex flex-col">{children}</body>
     </html>
   );
 }

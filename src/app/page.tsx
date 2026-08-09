@@ -73,7 +73,7 @@ export default async function Page() {
     // "Something went wrong."
     console.error('Page: failed to load media/clusters', err);
     return (
-      <main className="relative flex-1 cork-texture error-fallback-main">
+      <main className="relative h-dvh min-h-dvh flex-1 cork-texture error-fallback-main">
         <div className="error-fallback-card">
           <h1 className="error-fallback-title">Couldn&apos;t load the board</h1>
           <p className="error-fallback-lede">
@@ -86,7 +86,7 @@ export default async function Page() {
   }
 
   return (
-    <main className="relative flex-1">
+    <main className="relative h-dvh min-h-dvh flex-1">
       <Corkboard media={media} clusters={clusters} />
     </main>
   );

@@ -249,8 +249,11 @@ export default function ProfileDashboard({
 
       <div className="profile-shell" id="profile-content">
         <nav className="profile-topbar" aria-label="Profile navigation">
-          <Link href="/" className="profile-back-link">
-            <svg viewBox="0 0 24 24" aria-hidden="true">
+          <Link
+            href="/"
+            className="profile-back-link h-8 min-h-[32px] w-fit justify-self-start px-3 py-1.5 text-xs"
+          >
+            <svg className="size-3" viewBox="0 0 24 24" aria-hidden="true">
               <path d="m15 18-6-6 6-6" />
             </svg>
             Back to corkboard
