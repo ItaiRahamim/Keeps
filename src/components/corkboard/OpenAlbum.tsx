@@ -939,7 +939,7 @@ function OpenAlbumDialog({
     >
       <div className="open-album-header">
         <div className="open-album-heading-copy">
-          <p className="open-album-kicker">Keeps album</p>
+          <p className="open-album-kicker">memokeeps album</p>
           <h2 id={titleId} dir="auto">{title}</h2>
           <p id={descriptionId}>{album.items.length} {album.items.length === 1 ? 'memory' : 'memories'}</p>
         </div>

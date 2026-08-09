@@ -39,8 +39,8 @@ const playpenSansHebrew = Playpen_Sans_Hebrew({
 });
 
 export const metadata: Metadata = {
-  title: "Keeps",
-  description: "A family photo & video corkboard.",
+  title: "memokeeps",
+  description: "memokeeps is a family photo & video corkboard.",
   manifest: "/manifest.json",
   icons: {
     icon: [

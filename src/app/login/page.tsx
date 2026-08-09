@@ -79,7 +79,7 @@ export default function LoginPage() {
             ) : (
               <>
                 <h1 className="login-heading">
-                  {isSignUp ? 'Create your Keeps account' : 'Sign in to Keeps'}
+                  {isSignUp ? 'Create your memokeeps account' : 'Sign in to memokeeps'}
                 </h1>
                 <p className="login-subheading">
                   {isSignUp
@@ -147,7 +147,7 @@ export default function LoginPage() {
           </div>
 
           <div className="polaroid-chin">
-            <span>Keeps</span>
+            <span>memokeeps</span>
           </div>
         </div>
       </div>

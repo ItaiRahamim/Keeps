@@ -1,7 +1,7 @@
 {
-  "name": "Keeps",
-  "short_name": "Keeps",
-  "description": "A family photo & video corkboard.",
+  "name": "memokeeps",
+  "short_name": "memokeeps",
+  "description": "memokeeps is a family photo & video corkboard.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#CDBA96",

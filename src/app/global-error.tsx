@@ -56,7 +56,7 @@ export default function GlobalError({
             }}
           >
             <h1 style={{ fontSize: '1.25rem', fontWeight: 700, margin: '0 0 0.5rem' }}>
-              Keeps hit an unrecoverable error
+              memokeeps hit an unrecoverable error
             </h1>
             <p style={{ fontSize: '0.9rem', opacity: 0.75, margin: '0 0 1rem' }}>
               The root layout itself failed to render. Real error below (note: if this
