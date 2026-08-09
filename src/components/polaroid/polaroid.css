@@ -5,7 +5,7 @@
 .polaroid-card {
   position: absolute;
   cursor: grab;
-  touch-action: auto;
+  touch-action: none;
 }
 
 .polaroid-card[data-dragging='true'] {
@@ -32,79 +32,6 @@
   box-shadow: var(--shadow-polaroid);
   transition: box-shadow var(--duration-lift) ease-out;
   box-sizing: border-box;
-}
-
-.polaroid-drag-zones {
-  position: absolute;
-  inset: 0;
-  /* Above the editable chin (z50), below the options menu (z80). The
-     wrapper itself is transparent to hit testing; only the sparse zones
-     and visible grip can receive a pointer. */
-  z-index: 60;
-  pointer-events: none;
-}
-
-.polaroid-drag-zone,
-.polaroid-drag-grip {
-  position: absolute;
-  pointer-events: auto;
-  touch-action: none;
-  cursor: grab;
-  -webkit-touch-callout: none;
-}
-
-.polaroid-card[data-dragging='true'] .polaroid-drag-zone,
-.polaroid-card[data-dragging='true'] .polaroid-drag-grip {
-  cursor: grabbing;
-}
-
-.polaroid-drag-zone-top {
-  top: 0;
-  right: 0;
-  left: 0;
-  height: 12px;
-}
-
-.polaroid-drag-zone-left {
-  top: 12px;
-  bottom: 56px;
-  left: 0;
-  width: 12px;
-}
-
-.polaroid-drag-zone-right {
-  top: 12px;
-  right: 0;
-  bottom: 56px;
-  width: 12px;
-}
-
-.polaroid-drag-zone-bottom {
-  right: 0;
-  bottom: 0;
-  left: 0;
-  height: 8px;
-}
-
-.polaroid-drag-grip {
-  bottom: 6px;
-  left: 4px;
-  display: grid;
-  grid-template-columns: repeat(2, 3px);
-  grid-auto-rows: 3px;
-  gap: 3px;
-  width: 44px;
-  height: 44px;
-  place-content: center;
-  border-radius: 8px;
-  background: color-mix(in srgb, var(--color-polaroid) 88%, transparent);
-}
-
-.polaroid-drag-grip > span {
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--color-polaroid-shadow-tint) 38%, transparent);
 }
 
 .polaroid-card:hover .polaroid-body,
@@ -188,7 +115,7 @@
   color: var(--color-polaroid-shadow-tint);
   text-align: center;
   overflow: hidden;
-  cursor: text;
+  cursor: grab;
   pointer-events: auto;
   touch-action: manipulation;
 }

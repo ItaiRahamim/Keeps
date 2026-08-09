@@ -1,3 +1,7 @@
+.view-mode-navigation .view-brand-logo {
+  width: clamp(7.5rem, 15vw, 10rem);
+}
+
 .view-mode-toggle {
   width: 100%;
   max-width: 21rem;
@@ -7,6 +11,12 @@
   box-shadow: 1px 5px 15px rgba(58, 47, 34, 0.24);
   font-family: var(--font-ui);
   isolation: isolate;
+}
+
+@media (max-width: 520px) {
+  .view-mode-navigation .view-brand-logo {
+    width: 2rem;
+  }
 }
 
 .view-mode-toggle-slider {

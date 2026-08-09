@@ -1,0 +1,44 @@
+.memokeeps-logo {
+  display: inline-flex;
+  max-width: 100%;
+  flex: none;
+  align-items: center;
+  line-height: 0;
+  vertical-align: middle;
+}
+
+.memokeeps-logo--full,
+.memokeeps-logo--responsive {
+  width: 12rem;
+}
+
+.memokeeps-logo--mark {
+  width: 2.75rem;
+}
+
+.memokeeps-logo__full,
+.memokeeps-logo__mark {
+  display: block;
+  width: 100%;
+  height: auto;
+  flex: none;
+  object-fit: contain;
+}
+
+.memokeeps-logo--responsive .memokeeps-logo__mark {
+  display: none;
+}
+
+@media (max-width: 520px) {
+  .memokeeps-logo--responsive {
+    width: 2rem;
+  }
+
+  .memokeeps-logo--responsive .memokeeps-logo__full {
+    display: none;
+  }
+
+  .memokeeps-logo--responsive .memokeeps-logo__mark {
+    display: block;
+  }
+}

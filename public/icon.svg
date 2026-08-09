@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256" role="img" aria-labelledby="title">
+  <title id="title">memokeeps pinned Polaroid icon</title>
+  <defs>
+    <filter id="s" x="-30%" y="-30%" width="160%" height="180%"><feDropShadow dx="4" dy="10" stdDeviation="7" flood-color="#3a2f22" flood-opacity=".38"/></filter>
+    <radialGradient id="p" cx="34%" cy="25%" r="72%"><stop offset="0" stop-color="#f18a72"/><stop offset=".48" stop-color="#c6432b"/><stop offset="1" stop-color="#7e271a"/></radialGradient>
+    <pattern id="c" width="36" height="36" patternUnits="userSpaceOnUse"><rect width="36" height="36" fill="#b8865b"/><path d="M3 11q6-4 12 0M19 28q6 3 12-1" fill="none" stroke="#71432a" stroke-width="1.4" opacity=".3"/><circle cx="27" cy="8" r="1.2" fill="#efc28a" opacity=".45"/></pattern>
+  </defs>
+  <rect width="256" height="256" rx="58" fill="url(#c)"/>
+  <g filter="url(#s)" transform="rotate(-5 128 136)">
+    <rect x="61" y="47" width="140" height="169" rx="5" fill="#fdfbf7"/>
+    <rect x="74" y="64" width="114" height="108" rx="2" fill="#2e7d6b"/>
+    <circle cx="163" cy="87" r="17" fill="#d9a521"/>
+    <path d="M74 148 106 114l23 23 18-17 41 39v13H74Z" fill="#204f47"/>
+    <path d="M105 193c7-9 18-8 23 1 5-9 17-10 24-1-6 11-14 17-24 23-10-6-18-12-23-23Z" fill="#c6432b"/>
+  </g>
+  <path d="m128 49 4 29" stroke="#4e3326" stroke-width="5" stroke-linecap="round"/>
+  <circle cx="127" cy="40" r="23" fill="url(#p)" stroke="#8e2d1e" stroke-width="3"/>
+  <circle cx="119" cy="33" r="6" fill="#fff" opacity=".48"/>
+</svg>

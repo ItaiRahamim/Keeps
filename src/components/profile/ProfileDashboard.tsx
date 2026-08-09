@@ -6,6 +6,7 @@ import { useActionState, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import MediaLightbox from '@/components/media/MediaLightbox';
 import MediaOwnerMenu from '@/components/polaroid/MediaOwnerMenu';
+import Logo from '@/components/brand/Logo';
 import Pushpin from '@/components/pushpin/Pushpin';
 import AvatarCropDialog from '@/components/profile/AvatarCropDialog';
 import { signOut } from '@/lib/supabase/actions';
@@ -254,7 +255,7 @@ export default function ProfileDashboard({
             </svg>
             Back to corkboard
           </Link>
-          <span className="profile-wordmark">memokeeps</span>
+          <Logo className="profile-wordmark" priority />
           <form action={signOut}>
             <button type="submit" className="profile-logout">
               Log out

@@ -48,6 +48,10 @@
   justify-content: center;
 }
 
+.polaroid-chin .login-logo {
+  width: min(9rem, 82%);
+}
+
 .login-heading {
   font-family: var(--font-ui);
   font-size: 1.15rem;

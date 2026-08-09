@@ -40,19 +40,27 @@ const playpenSansHebrew = Playpen_Sans_Hebrew({
 
 export const metadata: Metadata = {
   title: "memokeeps",
+  applicationName: "memokeeps",
   description: "memokeeps is a family photo & video corkboard.",
   manifest: "/manifest.json",
   icons: {
-    icon: [
-      { url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" },
-      { url: "/icons/icon-512.png", sizes: "512x512", type: "image/png" },
-    ],
+    icon: [{ url: "/icon.svg", sizes: "any", type: "image/svg+xml" }],
     apple: [{ url: "/icons/icon-192.png", sizes: "192x192", type: "image/png" }],
+  },
+  appleWebApp: {
+    capable: true,
+    title: "memokeeps",
+    statusBarStyle: "black-translucent",
+  },
+  // Next.js 16 emits the standards-based `mobile-web-app-capable` tag for
+  // `appleWebApp.capable`; keep Apple's legacy tag too for older iOS builds.
+  other: {
+    "apple-mobile-web-app-capable": "yes",
   },
 };
 
 export const viewport: Viewport = {
-  themeColor: "#CDBA96",
+  themeColor: "#b8865b",
   viewportFit: "cover",
 };
 

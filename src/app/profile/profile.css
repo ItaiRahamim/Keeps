@@ -39,9 +39,7 @@
 }
 
 .profile-wordmark {
-  font-family: var(--font-caption);
-  font-size: clamp(1.65rem, 4vw, 2.2rem);
-  line-height: 1;
+  width: clamp(9.5rem, 17vw, 12rem);
 }
 
 .profile-topbar form {

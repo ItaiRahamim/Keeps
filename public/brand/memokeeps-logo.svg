@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="280" viewBox="0 0 960 280" role="img" aria-labelledby="title desc">
+  <title id="title">memokeeps pinned Polaroid logo</title>
+  <desc id="desc">A tactile Polaroid pinned to cork beside the lowercase memokeeps wordmark.</desc>
+  <defs>
+    <filter id="shadow" x="-30%" y="-30%" width="160%" height="180%">
+      <feDropShadow dx="3" dy="8" stdDeviation="6" flood-color="#3a2f22" flood-opacity=".28"/>
+    </filter>
+    <filter id="pinShadow" x="-50%" y="-50%" width="200%" height="220%">
+      <feDropShadow dx="1" dy="3" stdDeviation="2" flood-color="#3a2f22" flood-opacity=".42"/>
+    </filter>
+    <radialGradient id="pin" cx="34%" cy="25%" r="72%">
+      <stop offset="0" stop-color="#f18a72"/>
+      <stop offset=".48" stop-color="#c6432b"/>
+      <stop offset="1" stop-color="#7e271a"/>
+    </radialGradient>
+    <pattern id="cork" width="42" height="42" patternUnits="userSpaceOnUse">
+      <rect width="42" height="42" fill="#b8865b"/>
+      <path d="M4 12q6-4 13 0M22 31q7 3 14-1" fill="none" stroke="#75472d" stroke-width="1.2" opacity=".26" stroke-linecap="round"/>
+      <circle cx="32" cy="10" r="1.3" fill="#e4b984" opacity=".42"/>
+      <ellipse cx="10" cy="33" rx="2" ry=".8" fill="#5f351f" opacity=".27"/>
+    </pattern>
+  </defs>
+  <rect x="34" y="33" width="202" height="202" rx="36" fill="url(#cork)"/>
+  <g filter="url(#shadow)" transform="rotate(-4 136 140)">
+    <rect x="72" y="55" width="139" height="166" rx="3" fill="#fdfbf7"/>
+    <rect x="84" y="69" width="115" height="111" fill="#2e7d6b"/>
+    <circle cx="172" cy="94" r="18" fill="#d9a521"/>
+    <path d="M84 155 118 119l23 23 18-17 40 39v16H84Z" fill="#204f47"/>
+    <path d="M125 199c7-8 18-7 23 1 5-8 16-9 23-1-5 10-13 16-23 22-10-6-18-12-23-22Z" fill="#c6432b" opacity=".9"/>
+  </g>
+  <g filter="url(#pinShadow)">
+    <path d="m136 57 4 24" stroke="#4e3326" stroke-width="3" stroke-linecap="round"/>
+    <circle cx="135" cy="50" r="16" fill="url(#pin)" stroke="#8e2d1e" stroke-width="2"/>
+    <circle cx="130" cy="45" r="4" fill="#fff" opacity=".48"/>
+  </g>
+  <text x="276" y="144" fill="#3a2f22" font-family="Arial Rounded MT Bold, Trebuchet MS, system-ui, sans-serif" font-size="82" font-weight="700" letter-spacing="-4">memokeeps</text>
+  <path d="M282 172c111 15 231-12 345 1 64 8 133 6 205-3" fill="none" stroke="#d9a521" stroke-width="7" stroke-linecap="round" opacity=".82"/>
+  <text x="282" y="211" fill="#2e7d6b" font-family="Trebuchet MS, system-ui, sans-serif" font-size="20" font-weight="600" letter-spacing="2.6">MEMORIES, PINNED CLOSE</text>
+</svg>

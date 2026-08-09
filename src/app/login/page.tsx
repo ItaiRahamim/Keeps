@@ -8,6 +8,7 @@ import {
   type AuthResult,
 } from '@/lib/auth/actions';
 import Pushpin from '@/components/pushpin/Pushpin';
+import Logo from '@/components/brand/Logo';
 import '@/components/corkboard/cork-texture.css';
 import '@/components/polaroid/polaroid.css';
 import './login.css';
@@ -147,7 +148,7 @@ export default function LoginPage() {
           </div>
 
           <div className="polaroid-chin">
-            <span>memokeeps</span>
+            <Logo className="login-logo" priority />
           </div>
         </div>
       </div>

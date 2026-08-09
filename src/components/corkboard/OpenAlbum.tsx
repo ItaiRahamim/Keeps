@@ -23,6 +23,7 @@ import {
 import { hashString, rotationForId } from '../lib/deterministic';
 import { getPolaroidGeometry, POLAROID_MEDIA_WIDTH_PX } from '../polaroid/sizing';
 import MediaOwnerMenu from '../polaroid/MediaOwnerMenu';
+import Logo from '../brand/Logo';
 import { PhotoContributor } from './ContributorAttribution';
 import './open-album.css';
 
@@ -30,6 +31,7 @@ const MAX_ITEMS_PER_PAGE = 3;
 const MAX_ALBUM_PAGE_INDEX = 9999;
 const PAGES_PER_SPREAD = 2;
 const KEYBOARD_NUDGE = 0.035;
+const ALBUM_DRAG_SLOP_PX = 5;
 const EDGE_HOVER_DELAY_MS = 750;
 const EDGE_ZONE_MIN_PX = 52;
 const EDGE_ZONE_MAX_PX = 96;
@@ -76,6 +78,14 @@ type AlbumDragStart = {
   cardBookY: number;
 };
 
+type PendingAlbumDrag = {
+  pointerId: number;
+  startClientX: number;
+  startClientY: number;
+  input: Omit<AlbumDragStart, 'event'>;
+  startedOnMedia: boolean;
+};
+
 type BookDragSession = {
   pointerId: number;
   media: MediaRow;
@@ -95,6 +105,15 @@ type BookDragSession = {
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(max, Math.max(min, value));
+}
+
+function isAlbumNoDragTarget(target: EventTarget | null): boolean {
+  return (
+    target instanceof Element &&
+    target.closest(
+      '.media-owner-menu, input, textarea, select, button, label, a[href], video[controls], [contenteditable="true"]'
+    ) !== null
+  );
 }
 
 function validClientPlacement(value: AlbumPlacement): AlbumPlacement | null {
@@ -432,6 +451,8 @@ function AlbumMemoryCard({
   onMediaOpen,
 }: AlbumMemoryCardProps) {
   const cardRef = useRef<HTMLDivElement | null>(null);
+  const pendingDragRef = useRef<PendingAlbumDrag | null>(null);
+  const suppressMediaClickRef = useRef(false);
   const [videoActive, setVideoActive] = useState(false);
   const { media, mediaIndex, placement } = entry;
   const caption = captionFor(media, mediaIndex);
@@ -492,7 +513,6 @@ function AlbumMemoryCard({
       !onDragStart ||
       (event.pointerType === 'mouse' && event.button !== 0)
     ) return;
-    event.preventDefault();
     const page = pageRef.current;
     const book = bookRef.current;
     const card = cardRef.current;
@@ -500,14 +520,21 @@ function AlbumMemoryCard({
     const sourcePage = page.closest<HTMLElement>('.open-album-static-page');
     const sourcePageBox = sourcePage ? pageBoxWithinBook(sourcePage, book) : null;
     if (!sourcePageBox) return;
-    onDragStart({
-      event,
-      media,
-      placement,
-      card,
-      cardBookX: sourcePageBox.left + x.get(),
-      cardBookY: sourcePageBox.top + y.get(),
-    });
+    card.setPointerCapture(event.pointerId);
+    pendingDragRef.current = {
+      pointerId: event.pointerId,
+      startClientX: event.clientX,
+      startClientY: event.clientY,
+      startedOnMedia:
+        event.target instanceof Element && event.target.closest('.open-album-memory-photo') !== null,
+      input: {
+        media,
+        placement,
+        card,
+        cardBookX: sourcePageBox.left + x.get(),
+        cardBookY: sourcePageBox.top + y.get(),
+      },
+    };
   }
 
   return (
@@ -536,9 +563,45 @@ function AlbumMemoryCard({
       animate={{ scale: dragging ? 1.035 : 1 }}
       transition={{ type: 'spring', stiffness: 320, damping: 28 }}
       onPointerDown={(event) => {
-        // Keep the book's swipe gesture from starting over a memory. Only
-        // the explicit white-frame zones below initiate card dragging.
         event.stopPropagation();
+        if (isAlbumNoDragTarget(event.target)) return;
+        startDrag(event);
+      }}
+      onPointerMove={(event) => {
+        const pending = pendingDragRef.current;
+        if (!pending || pending.pointerId !== event.pointerId || !onDragStart) return;
+        event.stopPropagation();
+        if (
+          Math.hypot(
+            event.clientX - pending.startClientX,
+            event.clientY - pending.startClientY
+          ) < ALBUM_DRAG_SLOP_PX
+        ) return;
+        event.preventDefault();
+        pendingDragRef.current = null;
+        onDragStart({ event, ...pending.input });
+      }}
+      onPointerUp={(event) => {
+        const pending = pendingDragRef.current;
+        if (!pending || pending.pointerId !== event.pointerId) return;
+        event.stopPropagation();
+        pendingDragRef.current = null;
+        if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+          event.currentTarget.releasePointerCapture(event.pointerId);
+        }
+        if (pending.startedOnMedia && media.media_type === 'video' && !videoActive) {
+          suppressMediaClickRef.current = true;
+          window.setTimeout(() => {
+            suppressMediaClickRef.current = false;
+          }, 0);
+          setVideoActive(true);
+        }
+      }}
+      onPointerCancel={(event) => {
+        if (pendingDragRef.current?.pointerId === event.pointerId) pendingDragRef.current = null;
+      }}
+      onLostPointerCapture={(event) => {
+        if (pendingDragRef.current?.pointerId === event.pointerId) pendingDragRef.current = null;
       }}
       onKeyDown={(event) => {
         if (decorative) return;
@@ -560,22 +623,6 @@ function AlbumMemoryCard({
       }}
     >
       {!decorative ? (
-        <div className="open-album-drag-zones" aria-hidden="true">
-          <span className="open-album-drag-zone open-album-drag-zone-top" onPointerDown={startDrag} />
-          <span className="open-album-drag-zone open-album-drag-zone-left" onPointerDown={startDrag} />
-          <span className="open-album-drag-zone open-album-drag-zone-right" onPointerDown={startDrag} />
-          <span className="open-album-drag-zone open-album-drag-zone-bottom" onPointerDown={startDrag} />
-          <span className="open-album-drag-grip" onPointerDown={startDrag}>
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
-            <span />
-          </span>
-        </div>
-      ) : null}
-      {!decorative ? (
         <MediaOwnerMenu
           media={media}
           canManage={canManage}
@@ -594,11 +641,10 @@ function AlbumMemoryCard({
       <div
         className="open-album-memory-photo"
         data-media-type={media.media_type}
-        onPointerDown={(event) => event.stopPropagation()}
-        onPointerUp={(event) => event.stopPropagation()}
-        onPointerCancel={(event) => event.stopPropagation()}
+        data-video-active={videoActive || undefined}
         onClick={(event) => {
           event.stopPropagation();
+          if (suppressMediaClickRef.current) return;
           if (media.media_type === 'video' && !videoActive) setVideoActive(true);
         }}
       >
@@ -1188,7 +1234,10 @@ function OpenAlbumDialog({
     >
       <div className="open-album-header w-full max-w-full px-1">
         <div className="open-album-heading-copy min-w-0">
-          <p className="open-album-kicker">memokeeps album</p>
+          <p className="open-album-kicker">
+            <Logo variant="mark" className="open-album-brand-mark" />
+            <span>album</span>
+          </p>
           <h2 id={titleId} dir="auto">{title}</h2>
           <p id={descriptionId}>{album.items.length} {album.items.length === 1 ? 'memory' : 'memories'}</p>
         </div>

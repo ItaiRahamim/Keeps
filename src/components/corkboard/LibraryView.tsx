@@ -7,6 +7,7 @@ import { motion } from 'framer-motion';
 import type { MediaRow } from '@/lib/types';
 import { getMediaUrl } from '@/lib/contracts';
 import { updateAlbumName } from '@/lib/media/actions';
+import Logo from '../brand/Logo';
 import { pinColorForId, rotationForId } from '../lib/deterministic';
 import { AlbumContributors } from './ContributorAttribution';
 import './library-view.css';
@@ -201,11 +202,12 @@ export function ViewModeToggle({
 }) {
   return (
     <div
-      className="view-mode-navigation pointer-events-none absolute inset-x-0 top-0 z-[950] flex max-w-full items-center justify-center gap-2 overflow-x-hidden pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.55rem+env(safe-area-inset-top))] min-[481px]:pt-[calc(0.75rem+env(safe-area-inset-top))]"
+      className="view-mode-navigation pointer-events-none absolute inset-x-0 top-0 z-[950] flex max-w-full items-center justify-center gap-1 overflow-x-hidden pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.55rem+env(safe-area-inset-top))] min-[521px]:gap-2 min-[481px]:pt-[calc(0.75rem+env(safe-area-inset-top))]"
       role="navigation"
       aria-label="Board navigation"
       onPointerDown={(event) => event.stopPropagation()}
     >
+      <Logo variant="responsive" className="view-brand-logo" priority />
       <div className="view-mode-toggle pointer-events-auto relative grid min-w-0 flex-1 grid-cols-2 p-[0.3rem]">
         <span className="view-mode-toggle-slider" data-mode={value} aria-hidden="true" />
         <button
