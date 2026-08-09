@@ -11,21 +11,15 @@
 
 .login-page {
   /*
-   * `100vh` on iOS Safari measures the *layout* viewport, which is sized as
-   * if the URL bar/toolbar were always hidden — taller than the actually
-   * visible area whenever the chrome is showing, which can clip/push the
-   * pinned Polaroid card. `100dvh` (dynamic viewport height, iOS Safari
-   * 15.4+) tracks the real visible area as the chrome shows/hides. Declared
-   * second so it overrides the `100vh` fallback in browsers that support
-   * `dvh`; browsers without `dvh` support simply ignore the invalid second
-   * declaration and keep the `100vh` value.
+   * The root body owns the home-indicator inset. Filling its definite
+   * content height avoids adding a second viewport-height box below that
+   * padding while this page independently protects the sensor-housing edge.
    */
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: max(1rem, env(safe-area-inset-top)) 2rem 2rem;
   box-sizing: border-box;
 }
 

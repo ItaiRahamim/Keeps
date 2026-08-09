@@ -32,7 +32,7 @@ export default function GlobalError({
 }) {
   return (
     <html lang="en" style={{ colorScheme: 'light' }}>
-      <body style={{ margin: 0, background: '#CDBA96' }}>
+      <body style={{ margin: 0, background: '#b8865b' }}>
         <main
           style={{
             minHeight: '100vh',

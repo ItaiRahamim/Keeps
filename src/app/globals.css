@@ -52,6 +52,12 @@
  */
 :root {
   color-scheme: light;
+  background: #b8865b;
+}
+
+html,
+body {
+  background: #b8865b;
 }
 
 /*
@@ -65,7 +71,8 @@
  * would read as a stray white stripe.
  */
 body {
-  background: var(--color-cork);
+  box-sizing: border-box;
+  padding-bottom: env(safe-area-inset-bottom, 0px);
   color: var(--color-polaroid-shadow-tint);
   font-family: var(--font-ui);
 }

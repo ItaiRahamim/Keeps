@@ -711,7 +711,7 @@ export default function Corkboard({ media, clusters }: CorkboardProps) {
   return (
     <div
       ref={viewportRef}
-      className="corkboard-viewport cork-texture box-border max-w-full overflow-x-hidden pt-[env(safe-area-inset-top)] pb-[env(safe-area-inset-bottom)]"
+      className="corkboard-viewport cork-texture box-border max-w-full overflow-x-hidden"
       data-panning={isPanning}
       data-album-open={isAlbumModalActive}
       data-view-mode={viewMode}

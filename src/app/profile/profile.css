@@ -1,6 +1,5 @@
 .profile-page {
-  min-height: 100vh;
-  min-height: 100dvh;
+  min-height: 100%;
   overflow-x: hidden;
   color: var(--color-polaroid-shadow-tint);
   font-family: var(--font-ui);
@@ -9,7 +8,7 @@
 .profile-shell {
   width: min(1180px, calc(100% - 2rem));
   margin: 0 auto;
-  padding: 1rem 0 4rem;
+  padding: max(1rem, env(safe-area-inset-top)) 0 4rem;
 }
 
 .profile-skip-link {
@@ -71,8 +70,22 @@
   padding: 0.62rem 0.9rem;
 }
 
+.profile-back-link {
+  position: relative;
+  min-height: 2rem;
+  padding: 0.375rem 0.75rem;
+  font-size: 0.875rem;
+}
+
+.profile-back-link::before {
+  content: '';
+  position: absolute;
+  inset: -0.375rem 0;
+}
+
 .profile-back-link svg {
-  width: 1.15rem;
+  width: 1rem;
+  height: 1rem;
   fill: none;
   stroke: currentColor;
   stroke-width: 2.2;
@@ -752,7 +765,6 @@
     display: none;
   }
 
-  .profile-back-link,
   .profile-logout {
     padding-inline: 0.75rem;
     font-size: 0.77rem;

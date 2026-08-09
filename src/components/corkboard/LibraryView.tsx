@@ -202,7 +202,7 @@ export function ViewModeToggle({
 }) {
   return (
     <div
-      className="view-mode-navigation pointer-events-none absolute inset-x-0 top-0 z-[950] flex max-w-full items-center justify-center gap-1 overflow-x-hidden pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[calc(0.55rem+env(safe-area-inset-top))] min-[521px]:gap-2 min-[481px]:pt-[calc(0.75rem+env(safe-area-inset-top))]"
+      className="view-mode-navigation pointer-events-none absolute inset-x-0 top-0 z-[950] flex max-w-full items-center justify-center gap-1 overflow-x-hidden pl-[max(1rem,env(safe-area-inset-left))] pr-[max(1rem,env(safe-area-inset-right))] pt-[max(1rem,env(safe-area-inset-top))] min-[521px]:gap-2"
       role="navigation"
       aria-label="Board navigation"
       onPointerDown={(event) => event.stopPropagation()}

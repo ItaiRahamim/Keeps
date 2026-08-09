@@ -1304,6 +1304,11 @@ function OpenAlbumDialog({
             if (session) clearEdgeHover(session);
           }}
           onLostPointerCapture={(event) => {
+            // Moving capture from a card to the book emits a bubbling
+            // lostpointercapture from the card. Only cancel when the book itself
+            // actually loses the active drag pointer.
+            if (event.target !== event.currentTarget) return;
+            if (dragSessionRef.current?.pointerId !== event.pointerId) return;
             releaseBookDrag(event.pointerId, false);
           }}
         >
